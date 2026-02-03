@@ -1,0 +1,10 @@
+{
+  "name": "codrag-mcp",
+  "version": "0.0.0",
+  "description": "Thin MCP wrapper for CoDRAG (local-first codebase context)",
+  "license": "MIT",
+  "private": true,
+  "bin": {
+    "codrag-mcp": "bin/codrag-mcp.js"
+  }
+}
