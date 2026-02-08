@@ -66,7 +66,7 @@ export interface GridLayoutItem {
  * Default layout configuration
  */
 export const DEFAULT_LAYOUT: DashboardLayout = {
-  version: 8,
+  version: 9,
   panels: [
     // Top row — 4 panels across (12 cols: 2+3+3+4)
     { id: 'status', visible: true, height: 6, collapsed: false, x: 0, y: 0, w: 2 },
@@ -77,12 +77,13 @@ export const DEFAULT_LAYOUT: DashboardLayout = {
     { id: 'roots', visible: true, height: 20, collapsed: false, x: 0, y: 6, w: 5 },
     { id: 'search', visible: true, height: 7, collapsed: false, x: 5, y: 10, w: 7 },
     { id: 'results', visible: true, height: 10, collapsed: false, x: 5, y: 17, w: 7 },
-    // Bottom row
+    // Bottom row — status + trace coverage + settings
     { id: 'llm-status', visible: true, height: 6, collapsed: false, x: 5, y: 27, w: 3 },
+    { id: 'trace-coverage', visible: true, height: 10, collapsed: false, x: 0, y: 26, w: 5 },
     { id: 'settings', visible: true, height: 16, collapsed: true, x: 8, y: 27, w: 4 },
     // Hidden by default
-    { id: 'file-tree', visible: false, height: 10, collapsed: false, x: 0, y: 28, w: 4 },
-    { id: 'pinned-files', visible: false, height: 10, collapsed: false, x: 4, y: 28, w: 8 },
+    { id: 'file-tree', visible: false, height: 10, collapsed: false, x: 0, y: 38, w: 4 },
+    { id: 'pinned-files', visible: false, height: 10, collapsed: false, x: 4, y: 38, w: 8 },
   ],
 };
 

@@ -363,8 +363,8 @@ function App() {
       { id: 'default_ollama', name: 'Default Ollama', provider: 'ollama', url: 'http://localhost:11434' },
     ],
     embedding: { source: 'endpoint', endpoint_id: 'default_ollama', model: 'nomic-embed-text' },
-    small_model: { enabled: false, endpoint_id: 'default_ollama', model: 'qwen2.5:3b' },
-    large_model: { enabled: false, endpoint_id: 'default_ollama', model: 'mistral-nemo' },
+    small_model: { enabled: false },
+    large_model: { enabled: false },
     clara: { enabled: false, source: 'huggingface', remote_url: undefined },
   })
   const [availableModels, setAvailableModels] = useState<Record<string, string[]>>({})
@@ -868,6 +868,24 @@ function App() {
     void init()
   }, [refreshProjects])
 
+  // ── Auto-fetch models for pre-configured endpoints ──────────
+  useEffect(() => {
+    const endpointIds = new Set<string>()
+    if (llmConfig.embedding.source === 'endpoint' && llmConfig.embedding.endpoint_id) {
+      endpointIds.add(llmConfig.embedding.endpoint_id)
+    }
+    if (llmConfig.small_model.endpoint_id) endpointIds.add(llmConfig.small_model.endpoint_id)
+    if (llmConfig.large_model.endpoint_id) endpointIds.add(llmConfig.large_model.endpoint_id)
+
+    for (const epId of endpointIds) {
+      if (!availableModels[epId]?.length) {
+        void handleFetchModels(epId)
+      }
+    }
+  // Run once on mount — intentionally omitting deps to avoid re-fetching on every config change
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // ── Refresh status + watch when project changes ─────────────
   useEffect(() => {
     if (!selectedProjectId) return
@@ -1087,6 +1105,7 @@ function App() {
         onAddIgnorePattern={handleAddIgnorePattern}
         onRemoveIgnorePattern={handleRemoveIgnorePattern}
         onRefresh={fetchTraceCoverage}
+        bare
       />
     ),
   }), [
@@ -1123,21 +1142,23 @@ function App() {
 
   const panelDetails = useMemo(() => ({
     'llm-status': (
-      <AIModelsSettings
-        config={llmConfig}
-        onConfigChange={handleLLMConfigChange}
-        onAddEndpoint={handleAddEndpoint}
-        onEditEndpoint={handleEditEndpoint}
-        onDeleteEndpoint={handleDeleteEndpoint}
-        onTestEndpoint={handleTestEndpoint}
-        onFetchModels={handleFetchModels}
-        onTestModel={handleTestModel}
-        onHFDownload={() => {}}
-        availableModels={availableModels}
-        loadingModels={loadingModels}
-        testingSlot={testingSlot}
-        testResults={testResults}
-      />
+      <div className="max-w-6xl mx-auto w-full p-6">
+        <AIModelsSettings
+          config={llmConfig}
+          onConfigChange={handleLLMConfigChange}
+          onAddEndpoint={handleAddEndpoint}
+          onEditEndpoint={handleEditEndpoint}
+          onDeleteEndpoint={handleDeleteEndpoint}
+          onTestEndpoint={handleTestEndpoint}
+          onFetchModels={handleFetchModels}
+          onTestModel={handleTestModel}
+          onHFDownload={() => {}}
+          availableModels={availableModels}
+          loadingModels={loadingModels}
+          testingSlot={testingSlot}
+          testResults={testResults}
+        />
+      </div>
     ),
     roots: (
       <FileExplorerDetail
@@ -1146,6 +1167,11 @@ function App() {
         onPinFile={handlePinFile}
         onUnpinFile={handleUnpinFile}
         onLoadFileContent={handleLoadFileContent}
+        includedPaths={pinnedPaths}
+        onToggleInclude={(paths, action) => {
+          if (action === 'add') paths.forEach(handlePinFile)
+          else paths.forEach(handleUnpinFile)
+        }}
         pathWeights={pathWeights}
         onWeightChange={handlePathWeightChange}
       />

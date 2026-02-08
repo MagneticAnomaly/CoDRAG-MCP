@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   FileCode,
   Clock,
@@ -41,6 +41,8 @@ export interface TraceCoveragePanelProps {
   /** Refresh coverage data */
   onRefresh: () => void;
   className?: string;
+  /** When true, omits the panel header (title/refresh) — PanelChrome provides chrome */
+  bare?: boolean;
 }
 
 const LANG_LABELS: Record<string, string> = {
@@ -118,19 +120,25 @@ function CoverageBar({ summary }: { summary: TraceCoverageSummary }) {
   );
 }
 
+/** Threshold (px) below which the language badge column is hidden */
+const COMPACT_WIDTH_THRESHOLD = 380;
+
 function FileRow({
   file,
   timeField,
   actionLabel,
   onAction,
+  compact = false,
 }: {
   file: TraceCoverageFile;
   timeField: 'modified' | 'created';
   actionLabel?: string;
   onAction?: (path: string) => void;
+  compact?: boolean;
 }) {
   const langLabel = file.language ? (LANG_LABELS[file.language] || file.language) : null;
   const timeValue = timeField === 'modified' ? file.modified : file.created;
+  const timeLabel = timeField === 'modified' ? 'Modified' : 'Created';
 
   return (
     <div className="group flex items-center gap-2 px-3 py-1.5 hover:bg-surface-raised rounded-md transition-colors">
@@ -138,11 +146,11 @@ function FileRow({
       <span className="text-xs font-mono text-text truncate flex-1" title={file.path}>
         {file.path}
       </span>
-      <span className="text-[10px] text-text-muted shrink-0 hidden sm:inline">
-        {formatTimeAgo(timeValue)}
+      <span className="text-[10px] text-text-muted shrink-0 whitespace-nowrap">
+        {timeLabel}: {formatTimeAgo(timeValue)}
       </span>
-      {langLabel && (
-        <span className="text-[10px] text-text-subtle bg-surface-raised px-1.5 py-0.5 rounded shrink-0 hidden md:inline">
+      {!compact && langLabel && (
+        <span className="text-[10px] text-text-subtle bg-surface-raised px-1.5 py-0.5 rounded shrink-0">
           {langLabel}
         </span>
       )}
@@ -215,9 +223,24 @@ export function TraceCoveragePanel({
   onRemoveIgnorePattern,
   onRefresh,
   className,
+  bare = false,
 }: TraceCoveragePanelProps) {
   const [activeTab, setActiveTab] = useState<'queue' | 'ignored'>('queue');
   const [ignoreInput, setIgnoreInput] = useState('');
+  const [compact, setCompact] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setCompact(entry.contentRect.width < COMPACT_WIDTH_THRESHOLD);
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   const handleAddIgnore = useCallback(() => {
     const pattern = ignoreInput.trim();
@@ -238,26 +261,31 @@ export function TraceCoveragePanel({
   const queueCount = untracedFiles.length + staleFiles.length;
 
   return (
-    <div className={cn('flex flex-col h-full', className)}>
-      {/* Header */}
-      <div className="px-4 pt-4 pb-3 border-b border-border space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-text flex items-center gap-2">
-            <FileCode className="w-4 h-4" />
-            Trace Coverage
-          </h3>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={onRefresh}
-            disabled={loading}
-            className="h-6 w-6"
-            title="Refresh coverage"
-          >
-            <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
-          </Button>
+    <div ref={containerRef} className={cn('flex flex-col h-full', className)}>
+      {/* Header — only shown when NOT bare (standalone mode) */}
+      {!bare && (
+        <div className="px-4 pt-4 pb-3 border-b border-border space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-text flex items-center gap-2">
+              <FileCode className="w-4 h-4" />
+              Trace Coverage
+            </h3>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={onRefresh}
+              disabled={loading}
+              className="h-6 w-6"
+              title="Refresh coverage"
+            >
+              <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
+            </Button>
+          </div>
         </div>
+      )}
 
+      {/* Coverage summary bar */}
+      <div className={cn('space-y-2', bare ? 'px-3 pt-2 pb-1' : 'px-4 py-3 border-b border-border')}>
         {loading && !summary ? (
           <div className="flex items-center gap-2 text-xs text-text-muted py-2">
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -353,7 +381,7 @@ export function TraceCoveragePanel({
                   }
                 >
                   {untracedFiles.map((f) => (
-                    <FileRow key={f.path} file={f} timeField="created" />
+                    <FileRow key={f.path} file={f} timeField="created" compact={compact} />
                   ))}
                 </CollapsibleSection>
 
@@ -381,7 +409,7 @@ export function TraceCoveragePanel({
                   }
                 >
                   {staleFiles.map((f) => (
-                    <FileRow key={f.path} file={f} timeField="modified" />
+                    <FileRow key={f.path} file={f} timeField="modified" compact={compact} />
                   ))}
                 </CollapsibleSection>
               </>
@@ -439,6 +467,7 @@ export function TraceCoveragePanel({
                     timeField="modified"
                     actionLabel="Un-ignore"
                     onAction={(path) => onRemoveIgnorePattern(path)}
+                    compact={compact}
                   />
                 ))}
               </div>

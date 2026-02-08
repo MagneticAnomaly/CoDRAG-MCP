@@ -7,9 +7,13 @@ const repoRootPath = new URL('../../..', import.meta.url).pathname
 export default defineConfig({
   plugins: [react()],
   resolve: {
-    alias: {
-      '@codrag/ui': uiSrcPath,
-    },
+    alias: [
+      // Bare import '@codrag/ui' -> index.ts
+      { find: /^@codrag\/ui$/, replacement: `${uiSrcPath}/index.ts` },
+      // Sub-path imports '@codrag/ui/foo' -> src/foo
+      { find: /^@codrag\/ui\/(.*)$/, replacement: `${uiSrcPath}/$1` },
+    ],
+    extensions: ['.ts', '.tsx', '.js', '.jsx', '.json'],
   },
   server: {
     host: '0.0.0.0',

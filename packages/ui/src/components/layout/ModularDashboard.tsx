@@ -334,7 +334,7 @@ export function ModularDashboard({
                 <X className="w-5 h-5" />
               </Button>
             </div>
-            <div className="flex-1 min-h-0 overflow-hidden">
+            <div className="flex-1 min-h-0 overflow-auto">
               {detailsContent ?? (
                 <div className="p-6 text-sm text-text-muted">No details available</div>
               )}

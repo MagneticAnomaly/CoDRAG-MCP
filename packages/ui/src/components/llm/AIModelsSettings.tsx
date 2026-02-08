@@ -35,6 +35,33 @@ export interface AIModelsSettingsProps {
   className?: string;
 }
 
+// Recommended models per slot
+const RECOMMENDED_MODELS: Record<string, string[]> = {
+  embedding: ['nomic-embed-text'],
+  small: ['qwen3:4b', 'phi3:mini', 'phi-3-mini'],
+  large: ['mistral', 'qwen3:30b', 'deepseek-coder'],
+};
+
+/** Check if a model name matches an entry in the available list (handles ':latest' suffix) */
+function modelInList(model: string, list: string[]): boolean {
+  return list.some(
+    (m) => m === model || m === `${model}:latest` || model === `${m}:latest`
+      || m.replace(/:latest$/, '') === model.replace(/:latest$/, '')
+  );
+}
+
+/** Find the first recommended model present in the available list */
+function findRecommended(slot: string, list: string[]): string | undefined {
+  const recs = RECOMMENDED_MODELS[slot] ?? [];
+  for (const rec of recs) {
+    const match = list.find(
+      (m) => m === rec || m === `${rec}:latest` || m.replace(/:latest$/, '') === rec.replace(/:latest$/, '')
+    );
+    if (match) return match;
+  }
+  return undefined;
+}
+
 export function AIModelsSettings({
   config,
   onConfigChange,
@@ -59,12 +86,26 @@ export function AIModelsSettings({
     });
   };
   
-  const handleEmbeddingEndpointChange = (endpointId: string) => {
+  const handleEmbeddingEndpointChange = async (endpointId: string) => {
+    if (!endpointId || endpointId === '__disconnect__') {
+      onConfigChange({
+        ...config,
+        embedding: { ...config.embedding, endpoint_id: undefined, model: undefined },
+      });
+      return;
+    }
     onConfigChange({
       ...config,
       embedding: { ...config.embedding, endpoint_id: endpointId, model: undefined },
     });
-    onFetchModels(endpointId);
+    const models = await onFetchModels(endpointId);
+    const suggested = findRecommended('embedding', models);
+    if (suggested) {
+      onConfigChange({
+        ...config,
+        embedding: { ...config.embedding, endpoint_id: endpointId, model: suggested },
+      });
+    }
   };
   
   const handleEmbeddingModelChange = (model: string) => {
@@ -74,12 +115,26 @@ export function AIModelsSettings({
     });
   };
   
-  const handleSmallModelEndpointChange = (endpointId: string) => {
+  const handleSmallModelEndpointChange = async (endpointId: string) => {
+    if (!endpointId || endpointId === '__disconnect__') {
+      onConfigChange({
+        ...config,
+        small_model: { ...config.small_model, endpoint_id: undefined, model: undefined, enabled: false },
+      });
+      return;
+    }
     onConfigChange({
       ...config,
       small_model: { ...config.small_model, endpoint_id: endpointId, model: undefined, enabled: true },
     });
-    onFetchModels(endpointId);
+    const models = await onFetchModels(endpointId);
+    const suggested = findRecommended('small', models);
+    if (suggested) {
+      onConfigChange({
+        ...config,
+        small_model: { ...config.small_model, endpoint_id: endpointId, model: suggested, enabled: true },
+      });
+    }
   };
   
   const handleSmallModelChange = (model: string) => {
@@ -89,12 +144,26 @@ export function AIModelsSettings({
     });
   };
   
-  const handleLargeModelEndpointChange = (endpointId: string) => {
+  const handleLargeModelEndpointChange = async (endpointId: string) => {
+    if (!endpointId || endpointId === '__disconnect__') {
+      onConfigChange({
+        ...config,
+        large_model: { ...config.large_model, endpoint_id: undefined, model: undefined, enabled: false },
+      });
+      return;
+    }
     onConfigChange({
       ...config,
       large_model: { ...config.large_model, endpoint_id: endpointId, model: undefined, enabled: true },
     });
-    onFetchModels(endpointId);
+    const models = await onFetchModels(endpointId);
+    const suggested = findRecommended('large', models);
+    if (suggested) {
+      onConfigChange({
+        ...config,
+        large_model: { ...config.large_model, endpoint_id: endpointId, model: suggested, enabled: true },
+      });
+    }
   };
   
   const handleLargeModelChange = (model: string) => {
@@ -120,12 +189,16 @@ export function AIModelsSettings({
       return config.embedding.hf_downloaded ? 'connected' : 'not-configured';
     }
     if (!config.embedding.endpoint_id || !config.embedding.model) return 'not-configured';
-    return 'connected'; // Simplified - real app would check connection
+    const epModels = availableModels[config.embedding.endpoint_id] || [];
+    if (epModels.length === 0) return 'not-configured';
+    return modelInList(config.embedding.model, epModels) ? 'connected' : 'disconnected';
   };
   
   const getSlotStatus = (slot: { enabled: boolean; endpoint_id?: string; model?: string }) => {
     if (!slot.enabled || !slot.endpoint_id || !slot.model) return 'not-configured';
-    return 'connected';
+    const epModels = availableModels[slot.endpoint_id] || [];
+    if (epModels.length === 0) return 'not-configured';
+    return modelInList(slot.model, epModels) ? 'connected' : 'disconnected';
   };
   
   const getClaraStatus = () => {

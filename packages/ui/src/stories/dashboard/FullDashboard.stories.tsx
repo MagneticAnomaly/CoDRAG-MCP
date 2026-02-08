@@ -16,6 +16,8 @@ import { FolderTreePanel } from '../../components/project/FolderTreePanel';
 import { FileExplorerDetail } from '../../components/project/FileExplorerDetail';
 import type { PinnedTextFile } from '../../components/project/PinnedTextFilesPanel';
 import { TraceGraph, TraceGraphMini, SymbolSearchInput, type TraceNode } from '../../components/trace/index';
+import { TraceCoveragePanel } from '../../components/trace/TraceCoveragePanel';
+import type { TraceCoverageFile, TraceCoverageSummary } from '../../types';
 import { ModularDashboard, type DashboardLayoutApi } from '../../components/layout/ModularDashboard';
 import type { PanelDefinition } from '../../types/layout';
 import { ProjectSettingsPanel } from '../../components/project/ProjectSettingsPanel';
@@ -84,6 +86,31 @@ const mockResults: SearchResult[] = [
   },
 ];
 
+const mockUntracedFiles: TraceCoverageFile[] = [
+  { path: 'src/api/handlers.ts', language: 'typescript', size: 4200, modified: new Date(Date.now() - 3_600_000).toISOString(), created: new Date(Date.now() - 86_400_000).toISOString() },
+  { path: 'src/utils/logger.ts', language: 'typescript', size: 1800, modified: new Date(Date.now() - 86_400_000).toISOString(), created: new Date(Date.now() - 604_800_000).toISOString() },
+  { path: 'src/core/scheduler.py', language: 'python', size: 6100, modified: new Date(Date.now() - 3_600_000).toISOString(), created: new Date(Date.now() - 86_400_000).toISOString() },
+];
+
+const mockStaleFiles: TraceCoverageFile[] = [
+  { path: 'src/core/index.py', language: 'python', size: 8900, modified: new Date(Date.now() - 3_600_000).toISOString(), created: new Date(Date.now() - 604_800_000).toISOString() },
+];
+
+const mockIgnoredFiles: TraceCoverageFile[] = [
+  { path: 'tests/test_api.py', language: 'python', size: 3200, modified: new Date(Date.now() - 86_400_000).toISOString(), created: new Date(Date.now() - 604_800_000).toISOString() },
+  { path: 'scripts/deploy.sh', language: null, size: 800, modified: new Date(Date.now() - 86_400_000).toISOString(), created: new Date(Date.now() - 604_800_000).toISOString() },
+];
+
+const mockCoverageSummary: TraceCoverageSummary = {
+  total: 42,
+  traced: 38,
+  untraced: 3,
+  stale: 1,
+  ignored: 2,
+  coverage_pct: 90.5,
+  last_build_at: new Date(Date.now() - 3_600_000).toISOString(),
+};
+
 import { PANEL_REGISTRY } from '../../config/panelRegistry';
 
 // Define panels for the story by extending the registry
@@ -127,7 +154,14 @@ export const FullDashboard: StoryObj = {
     const [context, setContext] = useState('');
 
     // RAG inclusion state (primary functionality)
-    const [includedPaths, setIncludedPaths] = useState<Set<string>>(new Set(['src', 'docs']));
+    const [includedPaths, setIncludedPaths] = useState<Set<string>>(new Set([
+      'src', 'src/codrag', 'src/codrag/server.py', 'src/codrag/cli.py', 'src/codrag/__init__.py',
+      'src/codrag/core', 'src/codrag/core/registry.py', 'src/codrag/core/embedding.py',
+      'src/codrag/core/trace.py', 'src/codrag/core/watcher.py',
+      'src/codrag/api', 'src/codrag/api/routes.py', 'src/codrag/api/auth.py',
+      'docs', 'docs/ARCHITECTURE.md', 'docs/API.md', 'docs/ROADMAP.md',
+      // Note: docs/CHANGELOG.md is NOT included — it has status 'indexed' so it will show "Removing"
+    ]));
 
     const handleToggleInclude = useCallback((paths: string[], action: 'add' | 'remove') => {
       setIncludedPaths((prev) => {
@@ -138,6 +172,21 @@ export const FullDashboard: StoryObj = {
           } else {
             next.add(path);
           }
+        }
+        return next;
+      });
+    }, []);
+
+    // Path weights state
+    const [pathWeights, setPathWeights] = useState<Record<string, number>>({});
+
+    const handleWeightChange = useCallback((path: string, weight: number | null) => {
+      setPathWeights((prev) => {
+        const next = { ...prev };
+        if (weight === null) {
+          delete next[path];
+        } else {
+          next[path] = weight;
         }
         return next;
       });
@@ -286,6 +335,8 @@ export const FullDashboard: StoryObj = {
           data={sampleFileTree}
           includedPaths={includedPaths}
           onToggleInclude={handleToggleInclude}
+          pathWeights={pathWeights}
+          onWeightChange={handleWeightChange}
           className="h-full border-0 shadow-none"
           title="Index Scope"
           bare
@@ -296,6 +347,8 @@ export const FullDashboard: StoryObj = {
           data={sampleFileTree}
           includedPaths={includedPaths}
           onToggleInclude={handleToggleInclude}
+          pathWeights={pathWeights}
+          onWeightChange={handleWeightChange}
           className="h-full border-0 shadow-none"
           title="Project Files"
           bare
@@ -364,8 +417,24 @@ export const FullDashboard: StoryObj = {
             />
           </div>
         </div>
-      )
-    }), [repoRoot, building, query, searchK, minScore, searchLoading, results, selectedChunk, contextK, maxChars, includeSources, includeScores, structured, context, symbolQuery, selectedTraceNode, includedPaths, pinnedFiles, handleToggleInclude]);
+      ),
+      'trace-coverage': (
+        <TraceCoveragePanel
+          summary={mockCoverageSummary}
+          untracedFiles={mockUntracedFiles}
+          staleFiles={mockStaleFiles}
+          ignoredFiles={mockIgnoredFiles}
+          building={false}
+          loading={false}
+          onTraceAll={() => console.log('[Story] Trace All')}
+          onRetraceStale={() => console.log('[Story] Re-trace Stale')}
+          onAddIgnorePattern={(p) => console.log('[Story] Add ignore:', p)}
+          onRemoveIgnorePattern={(p) => console.log('[Story] Remove ignore:', p)}
+          onRefresh={() => console.log('[Story] Refresh')}
+          bare
+        />
+      ),
+    }), [repoRoot, building, query, searchK, minScore, searchLoading, results, selectedChunk, contextK, maxChars, includeSources, includeScores, structured, context, symbolQuery, selectedTraceNode, includedPaths, pinnedFiles, handleToggleInclude, pathWeights, handleWeightChange]);
 
     // Dynamic panel definitions for pinned files
     const dynamicPanelDefs = useMemo<PanelDefinition[]>(() =>
@@ -407,6 +476,8 @@ export const FullDashboard: StoryObj = {
           onUnpinFile={handleUnpinFile}
           includedPaths={includedPaths}
           onToggleInclude={handleToggleInclude}
+          pathWeights={pathWeights}
+          onWeightChange={handleWeightChange}
         />
       ),
       'file-tree': (
@@ -417,9 +488,11 @@ export const FullDashboard: StoryObj = {
           onUnpinFile={handleUnpinFile}
           includedPaths={includedPaths}
           onToggleInclude={handleToggleInclude}
+          pathWeights={pathWeights}
+          onWeightChange={handleWeightChange}
         />
       ),
-    }), [includedPaths, pinnedPathsSet, handleToggleInclude, handlePinFile, handleUnpinFile]);
+    }), [includedPaths, pinnedPathsSet, handleToggleInclude, handlePinFile, handleUnpinFile, pathWeights, handleWeightChange]);
 
     return (
       <div className="min-h-screen bg-background p-6">

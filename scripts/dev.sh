@@ -9,6 +9,7 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Port definitions
 DAEMON_PORT=8400
+DASHBOARD_PORT=5174
 STORYBOOK_PORT=6006
 MARKETING_PORT=3000
 DOCS_PORT=3001
@@ -58,6 +59,7 @@ load_nvm() {
 cleanup() {
     log_info "Shutting down all services..."
     kill_port $DAEMON_PORT
+    kill_port $DASHBOARD_PORT
     kill_port $STORYBOOK_PORT
     kill_port $MARKETING_PORT
     kill_port $DOCS_PORT
@@ -83,6 +85,7 @@ main() {
     # Kill any existing processes on our ports
     log_info "Cleaning up ports..."
     kill_port $DAEMON_PORT
+    kill_port $DASHBOARD_PORT
     kill_port $STORYBOOK_PORT
     kill_port $MARKETING_PORT
     kill_port $DOCS_PORT
@@ -113,6 +116,12 @@ main() {
     fi
     echo ""
 
+    # Start Dashboard Frontend
+    log_info "Starting Dashboard frontend on port $DASHBOARD_PORT..."
+    (source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && cd "$PROJECT_ROOT/src/codrag/dashboard" && npm run dev -- --port $DASHBOARD_PORT --host) &
+    DASHBOARD_PID=$!
+    echo ""
+
     # Start Storybook
     log_info "Starting Storybook on port $STORYBOOK_PORT..."
     (source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && cd "$PROJECT_ROOT/packages/ui" && npm run storybook -- -p $STORYBOOK_PORT) &
@@ -134,6 +143,7 @@ main() {
     echo "║                    Services Running                          ║"
     echo "╠══════════════════════════════════════════════════════════════╣"
     echo "║  CoDRAG Daemon     │  http://localhost:$DAEMON_PORT              ║"
+    echo "║  Dashboard UI      │  http://localhost:$DASHBOARD_PORT              ║"
     echo "║  Storybook         │  http://localhost:$STORYBOOK_PORT               ║"
     echo "║  Marketing Site    │  http://localhost:$MARKETING_PORT               ║"
     echo "║  Docs Site         │  http://localhost:$DOCS_PORT               ║"
@@ -153,6 +163,7 @@ case "${1:-}" in
     --kill|kill)
         log_info "Killing all dev services..."
         kill_port $DAEMON_PORT
+        kill_port $DASHBOARD_PORT
         kill_port $STORYBOOK_PORT
         kill_port $MARKETING_PORT
         kill_port $DOCS_PORT

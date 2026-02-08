@@ -3,7 +3,7 @@ import { ChevronRight, ChevronDown, Folder, FolderOpen, File, FileText } from 'l
 import { cn } from '../../lib/utils';
 import { Button } from '../primitives/Button';
 
-export type FileStatus = 'indexed' | 'pending' | 'ignored' | 'error';
+export type FileStatus = 'indexed' | 'pending' | 'pending_removal' | 'ignored' | 'error';
 
 export interface TreeNode {
   name: string;
@@ -17,6 +17,7 @@ export interface TreeNode {
 const statusColors: Record<FileStatus, string> = {
   indexed: 'bg-success',
   pending: 'bg-warning',
+  pending_removal: 'bg-error/70',
   ignored: 'bg-text-subtle/30',
   error: 'bg-error',
 };
@@ -24,6 +25,7 @@ const statusColors: Record<FileStatus, string> = {
 const statusLabels: Record<FileStatus, string> = {
   indexed: 'Indexed',
   pending: 'Pending',
+  pending_removal: 'Removing',
   ignored: 'Ignored',
   error: 'Error',
 };
@@ -74,6 +76,24 @@ function getFolderSelectionState(
   if (selectedCount === 0) return 'none';
   if (selectedCount === selectableChildren.length) return 'all';
   return 'partial';
+}
+
+/** Collect descendant paths that have explicit weight overrides */
+function collectChildWeightPaths(
+  node: TreeNode,
+  basePath: string,
+  pathWeights: Record<string, number>
+): string[] {
+  const results: string[] = [];
+  const currentPath = basePath ? `${basePath}/${node.name}` : node.name;
+  if (node.children) {
+    for (const child of node.children) {
+      const childPath = `${currentPath}/${child.name}`;
+      if (childPath in pathWeights) results.push(childPath);
+      if (child.children) results.push(...collectChildWeightPaths(child, currentPath, pathWeights));
+    }
+  }
+  return results;
 }
 
 /** Resolve effective weight for a path by walking up the hierarchy */
@@ -127,23 +147,36 @@ function WeightEditor({
   inheritedFrom,
   onWeightChange,
   currentPath,
+  isFolder = false,
+  childOverridePaths = [],
 }: {
   effectiveWeight: number;
   isInherited: boolean;
   inheritedFrom: string | null;
   onWeightChange?: (path: string, weight: number | null) => void;
   currentPath: string;
+  isFolder?: boolean;
+  childOverridePaths?: string[];
 }) {
   const [editing, setEditing] = useState(false);
   const [inputValue, setInputValue] = useState(effectiveWeight.toFixed(1));
+  const [overrideChildren, setOverrideChildren] = useState(true);
 
   if (!onWeightChange) return null;
+
+  const hasChildOverrides = childOverridePaths.length > 0;
 
   const handleSave = () => {
     setEditing(false);
     const parsed = parseFloat(inputValue);
     if (isNaN(parsed)) return;
     const clamped = Math.max(0, Math.min(2, Math.round(parsed * 10) / 10));
+    // For folders: clear child overrides first if requested
+    if (isFolder && overrideChildren && hasChildOverrides) {
+      for (const childPath of childOverridePaths) {
+        onWeightChange(childPath, null);
+      }
+    }
     onWeightChange(currentPath, clamped);
   };
 
@@ -164,7 +197,16 @@ function WeightEditor({
 
   if (editing) {
     return (
-      <span className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+      <span className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+        {!isInherited && (
+          <button
+            onMouseDown={e => { e.preventDefault(); handleReset(e); }}
+            className="text-[10px] text-text-subtle hover:text-primary px-0.5 leading-none"
+            title="Reset to inherited weight"
+          >
+            reset
+          </button>
+        )}
         <input
           type="number"
           min="0"
@@ -179,14 +221,20 @@ function WeightEditor({
           className="w-14 text-xs text-center bg-surface border border-border rounded px-1 py-0.5 font-mono
                      focus:outline-none focus:ring-1 focus:ring-primary"
         />
-        {!isInherited && (
-          <button
-            onMouseDown={e => { e.preventDefault(); handleReset(e); }}
-            className="text-[10px] text-text-subtle hover:text-primary px-0.5 leading-none"
-            title="Reset to inherited weight"
+        {isFolder && hasChildOverrides && (
+          <label
+            className="flex items-center gap-0.5 text-[10px] text-text-subtle whitespace-nowrap cursor-pointer"
+            title="Clear individual weight overrides within this folder"
+            onMouseDown={e => e.preventDefault()}
           >
-            reset
-          </button>
+            <input
+              type="checkbox"
+              checked={overrideChildren}
+              onChange={e => setOverrideChildren(e.target.checked)}
+              className="w-3 h-3 rounded border-border accent-primary"
+            />
+            override
+          </label>
         )}
       </span>
     );
@@ -204,13 +252,15 @@ function WeightEditor({
       title={
         isInherited && inheritedFrom
           ? `×${effectiveWeight.toFixed(1)} inherited from ${inheritedFrom}`
-          : effectiveWeight === 1.0
-            ? 'Click to set context weight'
-            : `×${effectiveWeight.toFixed(1)} (click to edit)`
+          : isFolder
+            ? `Click to set folder weight (applies to all children${hasChildOverrides ? `, ${childOverridePaths.length} override${childOverridePaths.length > 1 ? 's' : ''} exist` : ''})`
+            : effectiveWeight === 1.0
+              ? 'Click to set context weight (default 1.0)'
+              : `×${effectiveWeight.toFixed(1)} (click to edit)`
       }
       className={cn(
         'text-xs font-mono px-1.5 py-0.5 rounded transition-all whitespace-nowrap',
-        isDefault && 'opacity-0 group-hover:opacity-50 text-text-subtle hover:!opacity-100',
+        isDefault && 'text-text-subtle/40 hover:text-text-subtle hover:bg-surface-raised',
         !isDefault && effectiveWeight < 1 && 'bg-warning/10 text-warning hover:bg-warning/20',
         !isDefault && effectiveWeight > 1 && 'bg-success/10 text-success hover:bg-success/20',
         !isDefault && effectiveWeight === 1 && 'text-text-subtle',
@@ -270,8 +320,24 @@ function TreeItem({ node, depth = 0, path = '', includedPaths, onToggleInclude, 
   // Effective inclusion for display (folder is "included" if it or all its children are)
   const effectivelyIncluded = isFolder ? (isIncluded || isFolderFullySelected) : isIncluded;
 
-  // Only show status badge for included items (pending/indexed) or ignored items
-  const showStatus = isIgnored || (isIncluded && node.status && node.status !== 'error');
+  // Derive effective status:
+  // - indexed but unselected → pending_removal (will be removed on next rebuild)
+  // - included file with no explicit status → pending
+  // - otherwise use node.status
+  const effectiveStatus: FileStatus | undefined = 
+    (node.status === 'indexed' && !isIncluded) ? 'pending_removal'
+    : node.status ? node.status
+    : (isIncluded && !isFolder) ? 'pending'
+    : undefined;
+
+  // Collect child paths with explicit weight overrides (for folder weight bulk operations)
+  const childOverridePaths = isFolder ? collectChildWeightPaths(node, path, pathWeights ?? {}) : [];
+
+  // Show weight editor on included folders or included/pending files
+  const showFolderWeight = isFolder && !isIgnored && (effectivelyIncluded || isPartiallySelected);
+
+  // Only show status badge for ignored items, included items with pending/indexed, or pending_removal
+  const showStatus = isIgnored || effectiveStatus === 'pending_removal' || (isIncluded && effectiveStatus && effectiveStatus !== 'error');
 
   return (
     <div>
@@ -285,8 +351,8 @@ function TreeItem({ node, depth = 0, path = '', includedPaths, onToggleInclude, 
           isIgnored && 'opacity-50 cursor-default',
           // Selected/included items get a subtle background
           isIncluded && !isIgnored && 'bg-primary/5',
-          effectiveWeight < 1 && effectiveWeight > 0 && !isIgnored && isSelectable && 'opacity-75',
-          effectiveWeight === 0 && !isIgnored && isSelectable && 'opacity-40'
+          effectiveWeight < 1 && effectiveWeight > 0 && (showFolderWeight || (isIncluded && (effectiveStatus === 'indexed' || effectiveStatus === 'pending'))) && 'opacity-75',
+          effectiveWeight === 0 && (showFolderWeight || (isIncluded && (effectiveStatus === 'indexed' || effectiveStatus === 'pending'))) && 'opacity-40'
         )}
         onClick={handleRowClick}
         title={isIgnored 
@@ -349,36 +415,39 @@ function TreeItem({ node, depth = 0, path = '', includedPaths, onToggleInclude, 
           {node.name}
         </span>
 
-        {/* Right side: weight, status badge and chunk count - always at far right */}
+        {/* Right side: chunk count, status badge, then weight - always at far right */}
         <span className="ml-auto flex items-center gap-2 shrink-0">
-          {/* Weight editor */}
-          {isSelectable && (
-            <WeightEditor
-              effectiveWeight={effectiveWeight}
-              isInherited={isWeightInherited}
-              inheritedFrom={weightSource}
-              onWeightChange={onWeightChange}
-              currentPath={currentPath}
-            />
-          )}
           {/* Chunk count for indexed items */}
-          {node.chunks !== undefined && node.status === 'indexed' && (
+          {node.chunks !== undefined && effectiveStatus === 'indexed' && (
             <span className="text-xs text-text-subtle">
               {node.chunks} chunks
             </span>
           )}
           
           {/* Status badge: show for ignored items or included items with pending/indexed status */}
-          {showStatus && node.status && (
+          {showStatus && effectiveStatus && (
             <span
               className={cn(
                 "flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full",
-                `${statusColors[node.status]}/20`
+                `${statusColors[effectiveStatus]}/20`
               )}
             >
-              <span className={cn("w-1.5 h-1.5 rounded-full", statusColors[node.status])} />
-              <span className="text-text-subtle hidden sm:inline">{statusLabels[node.status]}</span>
+              <span className={cn("w-1.5 h-1.5 rounded-full", statusColors[effectiveStatus])} />
+              <span className="text-text-subtle hidden sm:inline">{statusLabels[effectiveStatus]}</span>
             </span>
+          )}
+
+          {/* Weight editor: for indexed/pending files OR included folders */}
+          {(showFolderWeight || ((effectiveStatus === 'indexed' || effectiveStatus === 'pending') && isIncluded)) && (
+            <WeightEditor
+              effectiveWeight={effectiveWeight}
+              isInherited={isWeightInherited}
+              inheritedFrom={weightSource}
+              onWeightChange={onWeightChange}
+              currentPath={currentPath}
+              isFolder={isFolder}
+              childOverridePaths={childOverridePaths}
+            />
           )}
         </span>
       </div>
@@ -483,6 +552,8 @@ export const sampleFileTree: TreeNode[] = [
       { name: 'API.md', type: 'file', status: 'indexed', chunks: 38 },
       // Just selected, waiting to be indexed
       { name: 'ROADMAP.md', type: 'file', status: 'pending' },
+      // Was indexed but user removed it — shows "Removing" until next rebuild
+      { name: 'CHANGELOG.md', type: 'file', status: 'indexed', chunks: 12 },
     ],
   },
   {

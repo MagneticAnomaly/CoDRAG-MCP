@@ -1,4 +1,5 @@
 import { Button } from '../primitives/Button';
+import { Select } from '../primitives/Select';
 import { cn } from '../../lib/utils';
 import type { SavedEndpoint, EndpointTestResult, ModelSource } from '../../types';
 import type { ReactNode } from 'react';
@@ -138,18 +139,19 @@ export function ModelCard({
             <label className="block text-xs font-medium text-text-muted mb-1.5">
               Endpoint
             </label>
-            <select
+            <Select
               value={endpoint || ''}
-              onChange={(e) => onEndpointChange?.(e.target.value)}
-              className="w-full bg-surface-raised border border-border rounded-md px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-shadow"
-            >
-              <option value="" disabled>Select endpoint...</option>
-              {endpoints.map((ep) => (
-                <option key={ep.id} value={ep.id}>
-                  {ep.name} ({ep.provider})
-                </option>
-              ))}
-            </select>
+              onChange={(e) => onEndpointChange?.(e.target.value || '')}
+              placeholder="Select endpoint..."
+              options={[
+                ...endpoints.map((ep) => ({
+                  value: ep.id,
+                  label: `${ep.name} (${ep.provider})`,
+                })),
+                ...(endpoint ? [{ value: '__disconnect__', label: '✕  Disconnect' }] : []),
+              ]}
+              className="w-full"
+            />
           </div>
           
           {/* Model Selector */}
@@ -159,19 +161,13 @@ export function ModelCard({
                 Model
               </label>
               <div className="flex gap-2">
-                <div className="flex-1 relative">
-                  <select
-                    value={model || ''}
-                    onChange={(e) => onModelChange?.(e.target.value)}
-                    className="w-full bg-surface-raised border border-border rounded-md px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-shadow appearance-none"
-                  >
-                    <option value="" disabled>Select model...</option>
-                    {availableModels.map((m) => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                  </select>
-                  {/* Custom arrow could go here */}
-                </div>
+                <Select
+                  value={model || ''}
+                  onChange={(e) => onModelChange?.(e.target.value)}
+                  placeholder="Select model..."
+                  options={availableModels.map((m) => ({ value: m, label: m }))}
+                  className="w-full flex-1"
+                />
                 {onRefreshModels && (
                   <Button
                     onClick={onRefreshModels}

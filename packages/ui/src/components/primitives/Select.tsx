@@ -33,17 +33,23 @@ export interface SelectProps
   extends Omit<React.SelectHTMLAttributes<HTMLSelectElement>, 'size'>,
     VariantProps<typeof selectVariants> {
   options: SelectOption[];
+  placeholder?: string;
 }
 
 const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
-  ({ className, variant, size, options, ...props }, ref) => {
+  ({ className, variant, size, options, placeholder, ...props }, ref) => {
     return (
-      <div className="relative inline-flex">
+      <div className={cn("relative", className)}>
         <select
-          className={cn(selectVariants({ variant, size, className }))}
+          className={cn(selectVariants({ variant, size }), "w-full")}
           ref={ref}
           {...props}
         >
+          {placeholder && (
+            <option value="" disabled>
+              {placeholder}
+            </option>
+          )}
           {options.map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}
