@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { DashboardGrid } from './DashboardGrid';
@@ -6,12 +6,18 @@ import { PanelChrome } from './PanelChrome';
 import { PanelPicker } from './PanelPicker';
 import { useLayoutPersistence } from './useLayoutPersistence';
 import type { PanelDefinition } from '../../types/layout';
+import { adjustLayoutForColChange, BASE_COLS, DEFAULT_LAYOUT } from '../../types/layout';
 import { cn } from '../../lib/utils';
 import { AutoHeightPanel } from './AutoHeightPanel';
 import { Button } from '../primitives/Button';
 
 export interface PanelContentMap {
   [panelId: string]: ReactNode;
+}
+
+export interface DashboardLayoutApi {
+  addPanel: (panelId: string, options?: { height?: number; x?: number; w?: number }) => void;
+  removePanel: (panelId: string) => void;
 }
 
 export interface ModularDashboardProps {
@@ -23,7 +29,12 @@ export interface ModularDashboardProps {
   headerRight?: ReactNode;
   rowHeight?: number;
   margin?: [number, number];
+  maxColWidth?: number;
   storageKey?: string;
+  /** Called when a closeable panel is closed (before visibility toggle). */
+  onPanelClose?: (panelId: string) => void;
+  /** Called once with layout API methods for dynamic panel management. */
+  onLayoutReady?: (api: DashboardLayoutApi) => void;
 }
 
 /**
@@ -41,16 +52,73 @@ export function ModularDashboard({
   headerRight,
   rowHeight = 20,
   margin = [24, 24],
+  maxColWidth = 120,
   storageKey,
+  onPanelClose,
+  onLayoutReady,
 }: ModularDashboardProps) {
   const {
     layout,
     updateLayout,
     togglePanelVisibility,
     togglePanelCollapsed,
-    resetLayout,
+    reflowLayout,
     setPanelHeight,
+    addPanel,
+    removePanel,
   } = useLayoutPersistence({ storageKey });
+
+  // Expose layout API to parent once
+  useEffect(() => {
+    onLayoutReady?.({ addPanel, removePanel });
+  }, [onLayoutReady, addPanel, removePanel]);
+
+  // Track current column count for reset centering
+  const currentColsRef = useRef<number>(BASE_COLS);
+
+  // Centered reset — shift DEFAULT_LAYOUT into current dynamic cols
+  const handleResetLayout = useCallback(() => {
+    const cols = currentColsRef.current;
+    const centered = adjustLayoutForColChange(DEFAULT_LAYOUT, BASE_COLS, cols);
+    updateLayout(centered);
+  }, [updateLayout]);
+
+  // Copy current layout JSON to clipboard
+  const handleCopyLayout = useCallback(() => {
+    const json = JSON.stringify(layout, null, 2);
+    navigator.clipboard.writeText(json).then(
+      () => window.alert('Layout copied to clipboard'),
+      () => window.alert('Failed to copy layout'),
+    );
+  }, [layout]);
+
+  // Paste layout JSON from clipboard
+  const handlePasteLayout = useCallback(() => {
+    navigator.clipboard.readText().then(
+      (text) => {
+        try {
+          const parsed = JSON.parse(text);
+          if (!parsed.panels || !Array.isArray(parsed.panels)) {
+            window.alert('Invalid layout: missing panels array');
+            return;
+          }
+          updateLayout(parsed);
+        } catch {
+          window.alert('Invalid JSON in clipboard');
+        }
+      },
+      () => window.alert('Failed to read clipboard'),
+    );
+  }, [updateLayout]);
+
+  // Handle dynamic column count changes — shift layout to keep panels centered
+  const handleColsChange = useCallback(
+    (prevCols: number, newCols: number) => {
+      currentColsRef.current = newCols;
+      updateLayout(adjustLayoutForColChange(layout, prevCols, newCols));
+    },
+    [layout, updateLayout],
+  );
 
   const [pendingHeights, setPendingHeights] = useState<Record<string, number>>({});
   const [detailsPanelId, setDetailsPanelId] = useState<string | null>(null);
@@ -149,7 +217,10 @@ export function ModularDashboard({
             layout={layout}
             panelDefinitions={panelDefinitions}
             onTogglePanel={togglePanelVisibility}
-            onResetLayout={resetLayout}
+            onResetLayout={handleResetLayout}
+            onRefitLayout={reflowLayout}
+            onCopyLayout={handleCopyLayout}
+            onPasteLayout={handlePasteLayout}
           />
         </div>
       </div>
@@ -159,8 +230,10 @@ export function ModularDashboard({
         layout={layout}
         panelDefinitions={panelDefinitions}
         onLayoutChange={updateLayout}
+        onColsChange={handleColsChange}
         rowHeight={rowHeight}
         margin={margin}
+        maxColWidth={maxColWidth}
       >
         {visiblePanels.map((panel) => {
           const def = getDefinition(panel.id);
@@ -194,7 +267,7 @@ export function ModularDashboard({
               onCollapse={() => togglePanelCollapsed(panel.id)}
               onDetails={canShowDetails ? () => setDetailsPanelId(panel.id) : undefined}
               closeable={def.closeable}
-              onClose={def.closeable ? () => togglePanelVisibility(panel.id) : undefined}
+              onClose={def.closeable ? () => { onPanelClose?.(panel.id); togglePanelVisibility(panel.id); } : undefined}
               fillHeight={true}
             >
               {contentNode}

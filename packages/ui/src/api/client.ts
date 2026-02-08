@@ -17,6 +17,9 @@ import type {
 import type { LLMStatus, Project, ProjectStatus, TraceStatus, WatchStatus } from '../types';
 
 export interface ApiClient {
+  // Configuration
+  readonly baseUrl: string;
+
   // Health
   getHealth(): Promise<{ status: string; version: string }>;
 
@@ -58,7 +61,7 @@ export interface ApiClientConfig {
 }
 
 export class CodragApiClient implements ApiClient {
-  private readonly baseUrl: string;
+  public readonly baseUrl: string;
   private readonly apiKey?: string;
   private readonly fetchImpl: typeof fetch;
 
@@ -185,7 +188,9 @@ export class CodragApiClient implements ApiClient {
     path: string,
     opts?: { method?: string; query?: Record<string, string | number | boolean | undefined>; body?: unknown }
   ): Promise<T> {
-    const url = new URL(path, this.baseUrl);
+    const baseUrl = this.baseUrl.endsWith('/') ? this.baseUrl : `${this.baseUrl}/`;
+    const relativePath = path.startsWith('/') ? path.slice(1) : path;
+    const url = new URL(relativePath, baseUrl);
 
     if (opts?.query) {
       for (const [k, v] of Object.entries(opts.query)) {
@@ -206,6 +211,12 @@ export class CodragApiClient implements ApiClient {
       headers.Authorization = `Bearer ${this.apiKey}`;
     }
 
+    console.log(`[ApiClient] Requesting: ${url.toString()}`, {
+      method: opts?.method ?? 'GET',
+      headers,
+      body: opts?.body
+    });
+
     let res: Response;
     try {
       res = await this.fetchImpl(url.toString(), {
@@ -214,6 +225,12 @@ export class CodragApiClient implements ApiClient {
         body: opts?.body !== undefined ? JSON.stringify(opts.body) : undefined,
       });
     } catch (err) {
+      console.error('[ApiClient] Network Error Details:', {
+        url: url.toString(),
+        error: err,
+        message: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined
+      });
       throw new ApiClientError('Network error contacting CoDRAG daemon', { url: url.toString() });
     }
 
@@ -221,11 +238,14 @@ export class CodragApiClient implements ApiClient {
     try {
       json = await res.json();
     } catch {
+      console.error(`[ApiClient] Invalid JSON from ${url.toString()}:`, res.status);
       throw new ApiClientError('Invalid JSON response from CoDRAG daemon', {
         status: res.status,
         url: url.toString(),
       });
     }
+
+    console.log(`[ApiClient] Response from ${url.toString()}:`, json);
 
     const envelope = json as ApiEnvelope<T>;
     if (typeof envelope !== 'object' || envelope === null || typeof envelope.success !== 'boolean') {

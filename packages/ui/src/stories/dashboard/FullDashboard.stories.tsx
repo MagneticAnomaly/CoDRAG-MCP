@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { useState, useMemo, useCallback } from 'react';
-import { Database, RefreshCw, Network, Settings, FolderTree as FolderTreeIcon } from 'lucide-react';
+import { useState, useMemo, useCallback, useRef } from 'react';
+import { Database, RefreshCw, Network, Settings, FileText } from 'lucide-react';
 import { Badge } from '@tremor/react';
 import { IndexStatusCard } from '../../components/dashboard/IndexStatusCard';
 import { BuildCard } from '../../components/dashboard/BuildCard';
@@ -11,14 +11,16 @@ import { SearchResultsList } from '../../components/search/SearchResultsList';
 import type { SearchResult } from '../../types';
 import { ChunkPreview } from '../../components/search/ChunkPreview';
 import { ContextOutput } from '../../components/search/ContextOutput';
-import { FolderTree, sampleFileTree } from '../../components/project/index';
+import { sampleFileTree } from '../../components/project/index';
 import { FolderTreePanel } from '../../components/project/FolderTreePanel';
-import { PinnedTextFilesPanel, type PinnedTextFile } from '../../components/project/PinnedTextFilesPanel';
+import { FileExplorerDetail } from '../../components/project/FileExplorerDetail';
+import type { PinnedTextFile } from '../../components/project/PinnedTextFilesPanel';
 import { TraceGraph, TraceGraphMini, SymbolSearchInput, type TraceNode } from '../../components/trace/index';
-import { ModularDashboard } from '../../components/layout/ModularDashboard';
+import { ModularDashboard, type DashboardLayoutApi } from '../../components/layout/ModularDashboard';
 import type { PanelDefinition } from '../../types/layout';
 import { ProjectSettingsPanel } from '../../components/project/ProjectSettingsPanel';
 import { WatchControlPanel } from '../../components/watch/WatchControlPanel';
+import { CopyButton } from '../../components/context/CopyButton';
 
 const meta: Meta = {
   title: 'Dashboard/Layouts/FullDashboard',
@@ -91,18 +93,17 @@ const STORY_PANELS: PanelDefinition[] = [
   { id: 'trace-explorer', title: 'Symbol Explorer', icon: Network, minHeight: 8, defaultHeight: 12, category: 'search', closeable: true },
 ];
 
-// Recursive helper to find file name by path in the sample tree
-const findFileName = (nodes: typeof sampleFileTree, targetPath: string, currentPath = ''): string | undefined => {
-  for (const node of nodes) {
-    const nodePath = currentPath ? `${currentPath}/${node.name}` : node.name;
-    if (nodePath === targetPath) return node.name;
-    if (node.children) {
-      const found = findFileName(node.children, targetPath, nodePath);
-      if (found) return found;
-    }
+/** Prefix for dynamically-pinned file panel IDs */
+const PINNED_PREFIX = 'pinned:';
+
+/** Generate mock file content for Storybook */
+function mockFileContent(path: string): string {
+  const name = path.split('/').pop() ?? path;
+  if (name.endsWith('.md')) {
+    return `# ${name}\n\nThis is the content of \`${path}\`.\n\n## Overview\n\nLorem ipsum dolor sit amet, consectetur adipiscing elit.\nSed do eiusmod tempor incididunt ut labore et dolore magna aliqua.\n`;
   }
-  return undefined;
-};
+  return `# ${path}\n# Auto-generated mock content\n\ndef example():\n    """Example function from ${name}."""\n    print("Hello from ${name}")\n    return True\n`;
+}
 
 export const FullDashboard: StoryObj = {
   render: () => {
@@ -142,27 +143,42 @@ export const FullDashboard: StoryObj = {
       });
     }, []);
 
-    // Pinned files state (secondary functionality for detail view)
+    // Pinned files state — each pinned file becomes its own dashboard panel
     const [pinnedFiles, setPinnedFiles] = useState<PinnedTextFile[]>([]);
+    const layoutApiRef = useRef<DashboardLayoutApi | null>(null);
 
     const handlePinFile = useCallback((path: string) => {
-      // Mock fetching file content
-      const name = findFileName(sampleFileTree, path) || path.split('/').pop() || 'unknown';
-      const newFile: PinnedTextFile = {
-        id: path,
-        path,
-        name,
-        content: `// Content for ${name}\n// Loaded from ${path}\n\nexport const ${name.replace(/\./g, '_')} = () => {\n  console.log("Hello from ${name}");\n};\n`
-      };
-      setPinnedFiles((files) => {
-        if (files.some(f => f.id === path)) return files;
-        return [...files, newFile];
+      const name = path.split('/').pop() || 'unknown';
+      const content = mockFileContent(path);
+      const panelId = `${PINNED_PREFIX}${path}`;
+
+      setPinnedFiles((prev) => {
+        if (prev.some((f) => f.id === path)) return prev;
+        return [...prev, { id: path, path, name, content }];
       });
+
+      // Add a visible panel to the grid
+      layoutApiRef.current?.addPanel(panelId, { height: 8, w: 6 });
     }, []);
 
-    const handleUnpin = useCallback((fileId: string) => {
-      setPinnedFiles((files) => files.filter((f) => f.id !== fileId));
+    const handleUnpinFile = useCallback((pathOrPanelId: string) => {
+      // Accept either a raw path or a "pinned:path" panel ID
+      const path = pathOrPanelId.startsWith(PINNED_PREFIX)
+        ? pathOrPanelId.slice(PINNED_PREFIX.length)
+        : pathOrPanelId;
+      const panelId = `${PINNED_PREFIX}${path}`;
+
+      setPinnedFiles((prev) => prev.filter((f) => f.id !== path));
+      layoutApiRef.current?.removePanel(panelId);
     }, []);
+
+    const handlePanelClose = useCallback((panelId: string) => {
+      if (panelId.startsWith(PINNED_PREFIX)) {
+        handleUnpinFile(panelId);
+      }
+    }, [handleUnpinFile]);
+
+    const pinnedPathsSet = useMemo(() => new Set(pinnedFiles.map((f) => f.id)), [pinnedFiles]);
 
     const handleBuild = () => {
       setBuilding(true);
@@ -285,13 +301,20 @@ export const FullDashboard: StoryObj = {
           bare
         />
       ),
-      'pinned-files': (
-        <PinnedTextFilesPanel
-          files={pinnedFiles}
-          onUnpin={handleUnpin}
-          className="h-full border-0 shadow-none"
-          bare
-        />
+      // Dynamic per-file pinned panels
+      ...Object.fromEntries(
+        pinnedFiles.map((f) => [
+          `${PINNED_PREFIX}${f.path}`,
+          <div key={f.path} className="h-full flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between gap-2 px-1 py-1 border-b border-border shrink-0">
+              <span className="text-xs font-mono text-text-muted truncate flex-1">{f.path}</span>
+              <CopyButton text={f.content} label="Copy" />
+            </div>
+            <pre className="flex-1 min-h-0 p-3 text-xs whitespace-pre-wrap font-mono text-text overflow-y-auto custom-scrollbar">
+              {f.content}
+            </pre>
+          </div>,
+        ])
       ),
       settings: (
         <ProjectSettingsPanel
@@ -342,7 +365,27 @@ export const FullDashboard: StoryObj = {
           </div>
         </div>
       )
-    }), [repoRoot, building, query, searchK, minScore, searchLoading, results, selectedChunk, contextK, maxChars, includeSources, includeScores, structured, context, symbolQuery, selectedTraceNode, includedPaths, pinnedFiles, handleToggleInclude, handleUnpin]);
+    }), [repoRoot, building, query, searchK, minScore, searchLoading, results, selectedChunk, contextK, maxChars, includeSources, includeScores, structured, context, symbolQuery, selectedTraceNode, includedPaths, pinnedFiles, handleToggleInclude]);
+
+    // Dynamic panel definitions for pinned files
+    const dynamicPanelDefs = useMemo<PanelDefinition[]>(() =>
+      pinnedFiles.map((f) => ({
+        id: `${PINNED_PREFIX}${f.path}`,
+        title: f.name,
+        icon: FileText,
+        minHeight: 4,
+        defaultHeight: 8,
+        category: 'projects' as const,
+        closeable: true,
+        resizable: true,
+      })),
+      [pinnedFiles]
+    );
+
+    const allPanelDefs = useMemo(
+      () => [...STORY_PANELS, ...dynamicPanelDefs],
+      [dynamicPanelDefs]
+    );
 
     const panelDetails = useMemo(() => ({
       'llm-status': (
@@ -357,50 +400,36 @@ export const FullDashboard: StoryObj = {
         </div>
       ),
       roots: (
-        <div className="p-6 h-full flex flex-col">
-          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-            <FolderTreeIcon className="w-6 h-6" />
-            File Explorer
-          </h2>
-          <div className="flex-1 border border-border rounded-lg overflow-hidden">
-            <FolderTree 
-              data={sampleFileTree}
-              includedPaths={includedPaths}
-              onToggleInclude={handleToggleInclude}
-              onNodeClick={(node, path) => {
-                if (node.type === 'file') handlePinFile(path);
-              }}
-            />
-          </div>
-        </div>
+        <FileExplorerDetail
+          treeData={sampleFileTree}
+          pinnedPaths={pinnedPathsSet}
+          onPinFile={handlePinFile}
+          onUnpinFile={handleUnpinFile}
+          includedPaths={includedPaths}
+          onToggleInclude={handleToggleInclude}
+        />
       ),
       'file-tree': (
-        <div className="p-6 h-full flex flex-col">
-          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-            <FolderTreeIcon className="w-6 h-6" />
-            File Explorer (Expanded)
-          </h2>
-          <div className="flex-1 border border-border rounded-lg overflow-hidden">
-            <FolderTree 
-              data={sampleFileTree}
-              includedPaths={includedPaths}
-              onToggleInclude={handleToggleInclude}
-              onNodeClick={(node, path) => {
-                if (node.type === 'file') handlePinFile(path);
-              }}
-            />
-          </div>
-        </div>
-      )
-    }), [includedPaths, handleToggleInclude, handlePinFile]);
+        <FileExplorerDetail
+          treeData={sampleFileTree}
+          pinnedPaths={pinnedPathsSet}
+          onPinFile={handlePinFile}
+          onUnpinFile={handleUnpinFile}
+          includedPaths={includedPaths}
+          onToggleInclude={handleToggleInclude}
+        />
+      ),
+    }), [includedPaths, pinnedPathsSet, handleToggleInclude, handlePinFile, handleUnpinFile]);
 
     return (
       <div className="min-h-screen bg-background p-6">
         <ModularDashboard
-          panelDefinitions={STORY_PANELS}
+          panelDefinitions={allPanelDefs}
           panelContent={panelContent}
           panelDetails={panelDetails}
           storageKey="storybook_fulldashboard_layout"
+          onPanelClose={handlePanelClose}
+          onLayoutReady={(api) => { layoutApiRef.current = api; }}
           headerLeft={
             <h1 className="text-2xl font-bold flex items-center gap-2 text-text">
               <Database className="w-6 h-6" />

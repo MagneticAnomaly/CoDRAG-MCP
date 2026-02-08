@@ -11,7 +11,7 @@ export default function Page() {
     <main className="min-h-screen bg-background text-text">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-12 space-y-24">
         {/* Hero Section */}
-        {showDevToolbar ? <DevMarketingHero /> : <MarketingHero variant="split" />}
+        {showDevToolbar ? <DevMarketingHero /> : <MarketingHero variant="yale" />}
 
         {/* Why CoDRAG — Problem / Solution / Result */}
         <section>
@@ -32,10 +32,10 @@ export default function Page() {
           <div className="text-center mb-16">
             <p className="text-sm font-semibold uppercase tracking-widest text-primary mb-3">Capabilities</p>
             <h2 className="text-3xl font-bold tracking-tight text-text sm:text-4xl">
-              Everything your AI tools are missing
+              The structural layer your AI tools don't have
             </h2>
             <p className="mt-4 text-lg text-text-muted max-w-2xl mx-auto">
-              Semantic search, structural code understanding, and instant context assembly — running locally, integrated with every major AI coding tool.
+              Semantic search, Rust-powered structural code understanding, and instant context assembly — running locally, integrated with every major AI coding tool.
             </p>
           </div>
           <FeatureBlocks features={codragFeatures} variant="cards" />
@@ -80,8 +80,8 @@ export default function Page() {
               <div className="text-sm text-text-muted mt-1">Sent to the cloud</div>
             </div>
             <div>
-              <div className="text-3xl font-bold text-primary">BYOK</div>
-              <div className="text-sm text-text-muted mt-1">No token markup</div>
+              <div className="text-3xl font-bold text-primary">No LLM</div>
+              <div className="text-sm text-text-muted mt-1">Required — Ollama optional</div>
             </div>
             <div>
               <div className="text-3xl font-bold text-primary">Perpetual</div>

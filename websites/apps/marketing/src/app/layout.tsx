@@ -1,10 +1,18 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import { Inter, JetBrains_Mono, Playfair_Display, Space_Mono, IBM_Plex_Sans, IBM_Plex_Mono } from 'next/font/google';
 
 import '@codrag/ui/styles';
 import './globals.css';
 
 import { ClientLayout } from './ClientLayout';
+
+const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
+const jetbrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-mono' });
+const playfair = Playfair_Display({ subsets: ['latin'], variable: '--font-serif' });
+const spaceMono = Space_Mono({ weight: ['400', '700'], subsets: ['latin'], variable: '--font-space' });
+const ibmPlexSans = IBM_Plex_Sans({ weight: ['400', '500', '600', '700'], subsets: ['latin'], variable: '--font-ibm-sans' });
+const ibmPlexMono = IBM_Plex_Mono({ weight: ['400', '500', '600'], subsets: ['latin'], variable: '--font-ibm-mono' });
 
 export const metadata: Metadata = {
   title: 'CoDRAG - Local-first Code Context',
@@ -13,8 +21,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" data-codrag-theme="a">
-      <body className="flex flex-col min-h-screen bg-background text-text selection:bg-primary/20">
+    <html lang="en" data-codrag-theme="k" className={`${inter.variable} ${jetbrainsMono.variable} ${playfair.variable} ${spaceMono.variable} ${ibmPlexSans.variable} ${ibmPlexMono.variable}`}>
+      <body className="flex flex-col min-h-screen bg-background text-text selection:bg-primary/20 font-sans">
         <ClientLayout>{children}</ClientLayout>
       </body>
     </html>

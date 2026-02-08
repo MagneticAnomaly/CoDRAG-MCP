@@ -2,12 +2,49 @@
 
 import type { ReactNode } from 'react';
 import { SiteHeader, SiteFooter } from '@codrag/ui';
+import { DevToolbar } from './DevToolbar';
+
+const isDev = process.env.NODE_ENV !== 'production';
+
+// Dev mode: point to local dev servers instead of production domains
+const DOCS_URL  = isDev ? 'http://localhost:3001' : 'https://docs.codrag.io';
+const SUPPORT_URL = isDev ? 'http://localhost:3002' : 'https://support.codrag.io';
+// const PAYMENTS_URL = isDev ? 'http://localhost:3003' : 'https://payments.codrag.io';
 
 const navLinks = [
   { label: 'Download', href: '/download' },
-  { label: 'Docs', href: 'https://docs.codrag.io' },
+  { label: 'Docs', href: DOCS_URL },
   { label: 'Pricing', href: '/pricing' },
-  { label: 'Support', href: 'https://support.codrag.io' },
+  { label: 'Support', href: SUPPORT_URL },
+];
+
+const footerSections = [
+  {
+    title: 'Product',
+    links: [
+      { label: 'Download', href: '/download' },
+      { label: 'Pricing', href: '/pricing' },
+      { label: 'Changelog', href: '/changelog' },
+      { label: 'Docs', href: DOCS_URL },
+    ],
+  },
+  {
+    title: 'Resources',
+    links: [
+      { label: 'Blog', href: '/blog' },
+      { label: 'Community', href: '/community' },
+      { label: 'Help Center', href: SUPPORT_URL },
+    ],
+  },
+  {
+    title: 'Company',
+    links: [
+      { label: 'About', href: '/about' },
+      { label: 'Careers', href: '/careers' },
+      { label: 'Contact', href: '/contact' },
+      { label: 'Security', href: '/security' },
+    ],
+  },
 ];
 
 export function ClientLayout({ children }: { children: ReactNode }) {
@@ -30,11 +67,13 @@ export function ClientLayout({ children }: { children: ReactNode }) {
       </main>
       <SiteFooter 
         productName="CoDRAG"
+        sections={footerSections}
         socials={{
           github: 'https://github.com/EricBintner/CoDRAG',
           email: 'hello@codrag.io'
         }}
       />
+      <DevToolbar />
     </>
   );
 }

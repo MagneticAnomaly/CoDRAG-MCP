@@ -217,7 +217,7 @@ export interface MCPToolInput {
 /**
  * Project mode
  */
-export type ProjectMode = 'standalone' | 'embedded';
+export type ProjectMode = 'standalone' | 'embedded' | 'custom';
 
 /**
  * Server mode for network access

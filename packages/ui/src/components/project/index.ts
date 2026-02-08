@@ -12,3 +12,9 @@ export type { FolderTreePanelProps } from './FolderTreePanel';
 
 export { PinnedTextFilesPanel } from './PinnedTextFilesPanel';
 export type { PinnedTextFilesPanelProps, PinnedTextFile } from './PinnedTextFilesPanel';
+
+export { FilePreviewPane } from './FilePreviewPane';
+export type { FilePreviewPaneProps } from './FilePreviewPane';
+
+export { FileExplorerDetail } from './FileExplorerDetail';
+export type { FileExplorerDetailProps } from './FileExplorerDetail';

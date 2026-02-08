@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { RefreshCw } from 'lucide-react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { RefreshCw, FileText } from 'lucide-react'
 import {
   // API
   useApiClient,
@@ -20,17 +20,18 @@ import {
   ModularDashboard,
   LLMStatusWidget,
   AIModelsSettings,
+  CopyButton,
   // Project
   AddProjectModal,
   FolderTreePanel,
-  FolderTree,
-  PinnedTextFilesPanel,
+  FileExplorerDetail,
   type PinnedTextFile,
   // Watch
   WatchControlPanel,
   // Patterns
   LoadingState,
   ErrorState,
+  EmptyState,
   // Primitives
   Button,
   Select,
@@ -46,6 +47,9 @@ import {
   type SavedEndpoint,
   type EndpointTestResult,
   type WatchStatus,
+  type ProjectMode,
+  type DashboardLayoutApi,
+  type PanelDefinition,
   // Layout
   PANEL_REGISTRY,
 } from '@codrag/ui'
@@ -53,6 +57,8 @@ import 'react-grid-layout/css/styles.css'
 import 'react-resizable/css/styles.css'
 
 // ── Constants ────────────────────────────────────────────────
+
+const PINNED_PREFIX = 'pinned:'
 
 const MODE_OPTIONS = [
   { value: 'light', label: 'Light' },
@@ -98,6 +104,84 @@ function toProjectSummary(p: ProjectListItem, ps: ProjectStatus | null, building
     chunk_count: ps?.index.total_chunks,
     last_build_at: ps?.index.last_build_at ?? undefined,
   }
+}
+
+// ── Connectivity Check ──────────────────────────────────────
+function ConnectivityStatus() {
+  const api = useApiClient()
+  const [status, setStatus] = useState<'connected' | 'disconnected' | 'checking'>('checking')
+
+  useEffect(() => {
+    const check = async () => {
+      try {
+        await api.getHealth()
+        setStatus('connected')
+      } catch {
+        setStatus('disconnected')
+      }
+    }
+    check()
+    const interval = setInterval(check, 5000)
+    return () => clearInterval(interval)
+  }, [api])
+
+  if (status === 'connected') return (
+    <div className="fixed top-4 right-4 z-50 flex items-center gap-2 px-3 py-1.5 bg-surface/80 backdrop-blur border border-border rounded-full shadow-sm text-xs font-medium text-text-muted">
+      <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
+      Daemon Connected
+    </div>
+  )
+  
+  if (status === 'disconnected') return (
+    <div className="fixed top-4 right-4 z-50 flex items-center gap-2 px-3 py-1.5 bg-error/10 border border-error/20 rounded-full shadow-sm text-xs font-medium text-error">
+      <div className="w-2 h-2 rounded-full bg-error" />
+      Daemon Disconnected
+    </div>
+  )
+
+  return null
+}
+
+// ── Debug Panel ──────────────────────────────────────────────
+function DebugPanel() {
+  const api = useApiClient();
+  const [lastResult, setLastResult] = useState<string>('No test run yet');
+
+  const runTest = async () => {
+    setLastResult('Testing connection...');
+    try {
+      // Access private field hack for debugging if needed, or just infer from behavior
+      const health = await api.getHealth();
+      setLastResult(`Success: ${JSON.stringify(health)}`);
+    } catch (err) {
+      setLastResult(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  return (
+    <div className="fixed bottom-0 left-0 right-0 bg-surface border-t border-border p-4 text-xs font-mono z-50 max-h-48 overflow-auto shadow-lg opacity-90 hover:opacity-100 transition-opacity">
+      <div className="flex items-center gap-4 mb-2">
+        <h3 className="font-bold text-text">Connection Debugger</h3>
+        <button 
+          onClick={runTest}
+          className="px-2 py-1 bg-primary text-primary-foreground rounded hover:bg-primary/90"
+        >
+          Test /health
+        </button>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <p><strong>Window Origin:</strong> {window.location.origin}</p>
+          {/* @ts-ignore */}
+          <p><strong>API Base URL:</strong> {api.baseUrl || '(hidden)'}</p> 
+          <p><strong>Browser:</strong> {navigator.userAgent}</p>
+        </div>
+        <div className="bg-background p-2 rounded border border-border">
+          <pre className="whitespace-pre-wrap break-all">{lastResult}</pre>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ── App ──────────────────────────────────────────────────────
@@ -149,6 +233,7 @@ function App() {
     } catch { return new Set() }
   })
   const [pinnedFiles, setPinnedFiles] = useState<PinnedTextFile[]>([])
+  const layoutApiRef = useRef<DashboardLayoutApi | null>(null)
 
   // ── Watch state ─────────────────────────────────────────────
   const [watchStatus, setWatchStatus] = useState<WatchStatus>({
@@ -226,14 +311,16 @@ function App() {
 
   // ── Actions ────────────────────────────────────────────────
 
-  const handleAddProject = useCallback(async (path: string, name: string, mode: 'standalone' | 'embedded') => {
+  const handleAddProject = useCallback(async (path: string, name: string, mode: ProjectMode, indexPath?: string) => {
     try {
-      const data = await api.createProject({ path, name, mode })
+      const data = await api.createProject({ path, name, mode, ...(indexPath ? { index_path: indexPath } : {}) })
       setProjects((prev) => [...prev, data.project])
       setSelectedProjectId(data.project.id)
       setAddModalOpen(false)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to add project')
+      const msg = e instanceof Error ? e.message : 'Failed to add project'
+      setError(msg)
+      throw e // Re-throw so modal can handle state
     }
   }, [api])
 
@@ -509,17 +596,37 @@ function App() {
       localStorage.setItem('codrag_pinned_files', JSON.stringify([...next]))
       return next
     })
+    // Add a visible panel to the grid
+    layoutApiRef.current?.addPanel(`${PINNED_PREFIX}${path}`, { height: 8, w: 6 })
   }, [])
 
-  const handleUnpinFile = useCallback((fileId: string) => {
+  const handleUnpinFile = useCallback((pathOrPanelId: string) => {
+    const path = pathOrPanelId.startsWith(PINNED_PREFIX)
+      ? pathOrPanelId.slice(PINNED_PREFIX.length)
+      : pathOrPanelId
+    const panelId = `${PINNED_PREFIX}${path}`
+
     setPinnedPaths((prev) => {
       const next = new Set(prev)
-      next.delete(fileId)
+      next.delete(path)
       localStorage.setItem('codrag_pinned_files', JSON.stringify([...next]))
       return next
     })
-    setPinnedFiles((prev) => prev.filter((f) => f.id !== fileId))
+    setPinnedFiles((prev) => prev.filter((f) => f.id !== path))
+    layoutApiRef.current?.removePanel(panelId)
   }, [])
+
+  const handlePanelClose = useCallback((panelId: string) => {
+    if (panelId.startsWith(PINNED_PREFIX)) {
+      handleUnpinFile(panelId)
+    }
+  }, [handleUnpinFile])
+
+  const handleLoadFileContent = useCallback(async (path: string): Promise<string> => {
+    if (!selectedProjectId) throw new Error('No project selected')
+    const data = await api.getProjectFileContent(selectedProjectId, path)
+    return data.content
+  }, [api, selectedProjectId])
 
   // Fetch content for pinned files when paths or project change
   useEffect(() => {
@@ -706,19 +813,22 @@ function App() {
           if (action === 'add') paths.forEach(handlePinFile)
           else paths.forEach(handleUnpinFile)
         }}
-        onNodeClick={(_node, path) => {
-          if (pinnedPaths.has(path)) handleUnpinFile(path)
-          else handlePinFile(path)
-        }}
         bare
       />
     ),
-    'pinned-files': (
-      <PinnedTextFilesPanel
-        files={pinnedFiles}
-        onUnpin={handleUnpinFile}
-        bare
-      />
+    ...Object.fromEntries(
+      pinnedFiles.map((f) => [
+        `${PINNED_PREFIX}${f.path}`,
+        <div key={f.path} className="h-full flex flex-col overflow-hidden">
+          <div className="flex items-center justify-between gap-2 px-1 py-1 border-b border-border shrink-0">
+            <span className="text-xs font-mono text-text-muted truncate flex-1">{f.path}</span>
+            <CopyButton text={f.content} label="Copy" />
+          </div>
+          <pre className="flex-1 min-h-0 p-3 text-xs whitespace-pre-wrap font-mono text-text overflow-y-auto custom-scrollbar">
+            {f.content}
+          </pre>
+        </div>,
+      ])
     ),
     watch: (
       <WatchControlPanel
@@ -750,6 +860,26 @@ function App() {
     handlePinFile, handleUnpinFile,
   ])
 
+  // ── Dynamic panel definitions for pinned files ──────────────
+  const dynamicPanelDefs = useMemo<PanelDefinition[]>(() =>
+    pinnedFiles.map((f) => ({
+      id: `${PINNED_PREFIX}${f.path}`,
+      title: f.name,
+      icon: FileText,
+      minHeight: 4,
+      defaultHeight: 8,
+      category: 'projects' as const,
+      closeable: true,
+      resizable: true,
+    })),
+    [pinnedFiles]
+  )
+
+  const allPanelDefs = useMemo(
+    () => [...PANEL_REGISTRY, ...dynamicPanelDefs],
+    [dynamicPanelDefs]
+  )
+
   const panelDetails = useMemo(() => ({
     'llm-status': (
       <AIModelsSettings
@@ -769,19 +899,18 @@ function App() {
       />
     ),
     roots: (
-      <div className="h-full flex flex-col">
-        <div className="flex-1 overflow-y-auto p-4">
-          <FolderTree
-            data={rootNames.map((name): TreeNode => ({ name, type: 'folder', children: [] }))}
-            compact
-          />
-        </div>
-      </div>
+      <FileExplorerDetail
+        treeData={rootNames.map((name): TreeNode => ({ name, type: 'folder', children: [] }))}
+        pinnedPaths={pinnedPaths}
+        onPinFile={handlePinFile}
+        onUnpinFile={handleUnpinFile}
+        onLoadFileContent={handleLoadFileContent}
+      />
     ),
   }), [
     llmConfig, handleLLMConfigChange, handleAddEndpoint, handleEditEndpoint, handleDeleteEndpoint,
     handleTestEndpoint, handleFetchModels, handleTestModel, availableModels, loadingModels, testingSlot, testResults,
-    rootNames,
+    rootNames, pinnedPaths, handlePinFile, handleUnpinFile, handleLoadFileContent,
   ])
 
   // ── Loading state ──────────────────────────────────────────
@@ -791,87 +920,87 @@ function App() {
 
   // ── Render ─────────────────────────────────────────────────
   return (
-    <AppShell
-      sidebar={
-        <Sidebar
-          collapsed={sidebarCollapsed}
-          onCollapseToggle={() => setSidebarCollapsed((c) => !c)}
-        >
-          {!sidebarCollapsed && (
-            <ProjectList
-              projects={projectSummaries}
-              selectedProjectId={selectedProjectId ?? undefined}
-              onProjectSelect={setSelectedProjectId}
-              onAddProject={() => setAddModalOpen(true)}
+    <>
+      <ConnectivityStatus />
+      <DebugPanel />
+      <AppShell
+        sidebar={
+          <Sidebar
+            collapsed={sidebarCollapsed}
+            onCollapseToggle={() => setSidebarCollapsed((c) => !c)}
+          >
+            {!sidebarCollapsed && (
+              <ProjectList
+                projects={projectSummaries}
+                selectedProjectId={selectedProjectId ?? undefined}
+                onProjectSelect={setSelectedProjectId}
+                onAddProject={() => setAddModalOpen(true)}
+              />
+            )}
+          </Sidebar>
+        }
+      >
+        {selectedProject ? (
+          <div className="w-full space-y-6">
+            <ModularDashboard
+              panelDefinitions={allPanelDefs}
+              panelContent={panelContent}
+              panelDetails={panelDetails}
+              onPanelClose={handlePanelClose}
+              onLayoutReady={(api) => { layoutApiRef.current = api }}
+              headerLeft={
+                <h1 className="text-2xl font-bold flex items-center gap-2 text-text">
+                  {selectedProject.name}
+                </h1>
+              }
+              headerRight={
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={uiMode}
+                    onChange={(e) => setUiMode(e.target.value as 'light' | 'dark')}
+                    aria-label="Mode"
+                    size="sm"
+                    options={MODE_OPTIONS}
+                  />
+                  <Select
+                    value={uiTheme}
+                    onChange={(e) => setUiTheme(e.target.value)}
+                    aria-label="Visual Style"
+                    size="sm"
+                    options={THEME_OPTIONS}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => selectedProjectId && void refreshStatus(selectedProjectId)}
+                    title="Refresh"
+                  >
+                    <RefreshCw className="w-5 h-5" />
+                  </Button>
+                </div>
+              }
             />
-          )}
-        </Sidebar>
-      }
-    >
-      {selectedProject ? (
-        <div className="w-full space-y-6">
-          <ModularDashboard
-            panelDefinitions={PANEL_REGISTRY}
-            panelContent={panelContent}
-            panelDetails={panelDetails}
-            headerLeft={
-              <h1 className="text-2xl font-bold flex items-center gap-2 text-text">
-                {selectedProject.name}
-              </h1>
-            }
-            headerRight={
-              <div className="flex items-center gap-2">
-                <Select
-                  value={uiMode}
-                  onChange={(e) => setUiMode(e.target.value as 'light' | 'dark')}
-                  aria-label="Mode"
-                  size="sm"
-                  options={MODE_OPTIONS}
-                />
-                <Select
-                  value={uiTheme}
-                  onChange={(e) => setUiTheme(e.target.value)}
-                  aria-label="Visual Style"
-                  size="sm"
-                  options={THEME_OPTIONS}
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => selectedProjectId && void refreshStatus(selectedProjectId)}
-                  title="Refresh"
-                >
-                  <RefreshCw className="w-5 h-5" />
-                </Button>
-              </div>
+          </div>
+        ) : (
+          <EmptyState
+            icon={FileText}
+            title="No Project Selected"
+            description="Select a project from the sidebar or create a new one to get started."
+            action={
+              <Button onClick={() => setAddModalOpen(true)}>
+                Add Project
+              </Button>
             }
           />
-        </div>
-      ) : (
-        <div className="flex items-center justify-center h-full">
-          <div className="text-center space-y-4">
-            <p className="text-text-muted text-lg">No project selected</p>
-            <Button onClick={() => setAddModalOpen(true)}>
-              Add Your First Project
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {error && (
-        <ErrorState
-          title="Error"
-          error={{ code: 'APP_ERROR', message: error }}
-          onDismiss={() => setError(null)}
-        />
-      )}
+        )}
+      </AppShell>
 
       <AddProjectModal
         isOpen={addModalOpen}
         onClose={() => setAddModalOpen(false)}
         onAdd={handleAddProject}
       />
-    </AppShell>
+    </>
   )
 }
 

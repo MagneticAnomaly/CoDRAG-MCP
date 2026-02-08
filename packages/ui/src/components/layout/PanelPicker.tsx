@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check, Plus, RotateCcw } from 'lucide-react';
+import { Check, ClipboardCopy, ClipboardPaste, Columns3, Plus, RotateCcw } from 'lucide-react';
 import type { DashboardLayout, PanelDefinition } from '../../types/layout';
 import { cn } from '../../lib/utils';
 import { Button } from '../primitives/Button';
@@ -9,6 +9,9 @@ export interface PanelPickerProps {
   panelDefinitions: PanelDefinition[];
   onTogglePanel: (panelId: string) => void;
   onResetLayout: () => void;
+  onRefitLayout?: () => void;
+  onCopyLayout?: () => void;
+  onPasteLayout?: () => void;
   className?: string;
 }
 
@@ -17,6 +20,9 @@ export function PanelPicker({
   panelDefinitions,
   onTogglePanel,
   onResetLayout,
+  onRefitLayout,
+  onCopyLayout,
+  onPasteLayout,
   className,
 }: PanelPickerProps) {
   const [open, setOpen] = useState(false);
@@ -90,7 +96,18 @@ export function PanelPicker({
               })}
             </div>
 
-            <div className="p-2 border-t border-border">
+            <div className="p-2 border-t border-border flex flex-col gap-1">
+              {onRefitLayout && (
+                <Button
+                  onClick={() => { onRefitLayout(); setOpen(false); }}
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-center text-text-muted hover:text-text hover:bg-muted"
+                  icon={Columns3}
+                >
+                  Refit Layout
+                </Button>
+              )}
               <Button
                 onClick={handleReset}
                 variant="ghost"
@@ -100,6 +117,28 @@ export function PanelPicker({
               >
                 Reset Layout
               </Button>
+              {onCopyLayout && (
+                <Button
+                  onClick={() => { onCopyLayout(); setOpen(false); }}
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-center text-text-muted hover:text-text hover:bg-muted"
+                  icon={ClipboardCopy}
+                >
+                  Copy Layout
+                </Button>
+              )}
+              {onPasteLayout && (
+                <Button
+                  onClick={() => { onPasteLayout(); setOpen(false); }}
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-center text-text-muted hover:text-text hover:bg-muted"
+                  icon={ClipboardPaste}
+                >
+                  Paste Layout
+                </Button>
+              )}
             </div>
           </div>
         </>

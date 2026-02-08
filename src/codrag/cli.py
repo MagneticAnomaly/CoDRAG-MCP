@@ -186,7 +186,17 @@ def serve(
 def add(
     path: str = typer.Argument(..., help="Path to project root directory"),
     name: str = typer.Option(None, "--name", "-n", help="Project name (defaults to folder name)"),
-    mode: str = typer.Option("standalone", "--mode", "-m", help="Index mode: standalone (global data dir) or embedded (.codrag in repo)"),
+    mode: str = typer.Option(
+        "standalone", "--mode", "-m",
+        help="Index location: standalone (app data dir, best for portability), "
+             "embedded (.codrag/ in repo, best when boot disk is faster), "
+             "or custom (specify --index-path, best for fast scratch disks)",
+    ),
+    index_path: str = typer.Option(
+        None, "--index-path",
+        help="Custom path for the index database (only used when --mode=custom). "
+             "Ideal for NVMe scratch disks, Optane drives, or RAM disks.",
+    ),
     host: str = typer.Option("127.0.0.1", "--host", help="Server host"),
     port: int = typer.Option(8400, "--port", help="Server port"),
 ) -> None:
@@ -198,12 +208,18 @@ def add(
     base = _base_url(host, port)
     abs_path = str(Path(path).resolve())
     
-    payload = {
+    if mode == "custom" and not index_path:
+        console.print("[red]Error:[/red] --index-path is required when --mode=custom")
+        raise typer.Exit(1)
+    
+    payload: dict = {
         "path": abs_path,
         "mode": mode,
     }
     if name:
         payload["name"] = name
+    if index_path:
+        payload["index_path"] = str(Path(index_path).resolve())
         
     data = _post_json(f"{base}/projects", payload)
     p = data.get("project", {})
@@ -212,6 +228,8 @@ def add(
     console.print(f"  ID: {p.get('id')}")
     console.print(f"  Path: {p.get('path')}")
     console.print(f"  Mode: {p.get('mode')}")
+    if index_path:
+        console.print(f"  Index Path: {p.get('index_path', index_path)}")
     console.print("\n[dim]Run 'codrag build' to index this project.[/dim]")
 
 
@@ -403,7 +421,8 @@ def search(
         console.print(f"[bold cyan]{i}. {path}:{lines}[/bold cyan] [dim](score: {score:.3f})[/dim]")
         if preview:
             # Simple syntax highlighting simulation
-            console.print(f"   [dim]{preview[:200].replace('\n', ' ')}...[/dim]")
+            safe_preview = preview[:200].replace('\n', ' ')
+            console.print(f"   [dim]{safe_preview}...[/dim]")
         console.print()
 
 

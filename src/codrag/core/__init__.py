@@ -6,12 +6,49 @@ Contains the main components:
 - Embedder: Embedding abstraction (OllamaEmbedder)
 - Chunking: Document chunking strategies
 
-TODO:
-- registry: Project registry (SQLite)
-- trace: Trace index (symbol graph)
-- watcher: File watcher for auto-rebuild
-- llm: LLM coordinator (Ollama, CLaRa)
+Engine selection:
+- Set CODRAG_ENGINE=rust to force the Rust engine (codrag_engine via PyO3)
+- Set CODRAG_ENGINE=python to force the Python fallback
+- Default: auto-detect (use Rust if available, else Python)
 """
+
+import logging
+import os
+
+_logger = logging.getLogger(__name__)
+
+# --- Engine detection ---
+_engine_preference = os.environ.get("CODRAG_ENGINE", "auto").lower()
+
+try:
+    import codrag_engine as _rust_engine
+
+    _RUST_AVAILABLE = True
+    _RUST_VERSION = _rust_engine.version()
+except ImportError:
+    _RUST_AVAILABLE = False
+    _RUST_VERSION = None
+    _rust_engine = None
+
+if _engine_preference == "rust" and not _RUST_AVAILABLE:
+    _logger.warning("CODRAG_ENGINE=rust but codrag_engine not installed; falling back to Python")
+
+if _engine_preference == "rust" and _RUST_AVAILABLE:
+    ENGINE = "rust"
+elif _engine_preference == "python":
+    ENGINE = "python"
+elif _engine_preference == "auto" and _RUST_AVAILABLE:
+    ENGINE = "rust"
+else:
+    ENGINE = "python"
+
+if ENGINE == "rust":
+    _logger.info("Using Rust engine: %s", _RUST_VERSION)
+else:
+    if _RUST_AVAILABLE:
+        _logger.info("Using Python engine (Rust available but not selected)")
+    else:
+        _logger.debug("Using Python engine (codrag_engine not installed)")
 
 from .embedder import Embedder, OllamaEmbedder, FakeEmbedder, EmbeddingResult
 from .chunking import Chunk, chunk_markdown, chunk_code
@@ -19,6 +56,7 @@ from .index import CodeIndex, SearchResult
 from .trace import TraceBuilder, TraceIndex, TraceNode, TraceEdge, build_trace
 
 __all__ = [
+    "ENGINE",
     "CodeIndex",
     "SearchResult",
     "Embedder",

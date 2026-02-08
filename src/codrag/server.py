@@ -54,7 +54,7 @@ install_api_exception_handlers(app)
 # CORS for dashboard
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # Allow all origins to rule out CORS issues
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -584,6 +584,7 @@ class AddProjectRequest(BaseModel):
     path: str
     name: Optional[str] = None
     mode: str = "standalone"
+    index_path: Optional[str] = None
 
 
 class UpdateProjectRequest(BaseModel):
@@ -848,8 +849,8 @@ def list_projects() -> Dict[str, Any]:
 
 @app.post("/projects")
 def add_project(req: AddProjectRequest) -> Dict[str, Any]:
-    if req.mode not in ("standalone", "embedded"):
-        raise ApiException(status_code=400, code="VALIDATION_ERROR", message="Invalid mode")
+    if req.mode not in ("standalone", "embedded", "custom"):
+        raise ApiException(status_code=400, code="VALIDATION_ERROR", message=f"Invalid mode: {req.mode}")
 
     p = Path(str(req.path)).expanduser().resolve()
     if not p.exists() or not p.is_dir():
@@ -858,6 +859,28 @@ def add_project(req: AddProjectRequest) -> Dict[str, Any]:
             code="VALIDATION_ERROR",
             message=f"Path does not exist: {p}",
         )
+
+    # Validate index_path for custom mode
+    custom_index_path: Optional[str] = None
+    if req.mode == "custom":
+        if not req.index_path:
+            raise ApiException(
+                status_code=400,
+                code="VALIDATION_ERROR",
+                message="index_path is required for custom mode",
+            )
+        try:
+            ip = Path(req.index_path).expanduser().resolve()
+            # We don't necessarily require it to exist yet (we can create it), 
+            # but maybe we should ensure parent exists or it's a valid path.
+            # For now just resolving it is enough check for basic validity.
+            custom_index_path = str(ip)
+        except Exception as e:
+            raise ApiException(
+                status_code=400,
+                code="VALIDATION_ERROR",
+                message=f"Invalid index_path: {e}",
+            )
 
     reg = _get_registry()
     default_cfg: Dict[str, Any] = {
@@ -869,9 +892,15 @@ def add_project(req: AddProjectRequest) -> Dict[str, Any]:
             "enabled": bool((_DEFAULT_UI_CONFIG.get("auto_rebuild") or {}).get("enabled", False)),
         },
     }
+    
     if req.mode == "embedded":
         if "**/.codrag/**" not in default_cfg["exclude_globs"]:
             default_cfg["exclude_globs"].append("**/.codrag/**")
+    
+    # Store custom index path in config if applicable
+    if custom_index_path:
+        default_cfg["index_path"] = custom_index_path
+
     if (_DEFAULT_UI_CONFIG.get("auto_rebuild") or {}).get("debounce_ms") is not None:
         default_cfg["auto_rebuild"]["debounce_ms"] = int(
             (_DEFAULT_UI_CONFIG.get("auto_rebuild") or {}).get("debounce_ms")
@@ -1479,8 +1508,7 @@ def get_trace_node(project_id: str, node_id: str) -> Dict[str, Any]:
     if node is None:
         raise ApiException(status_code=404, code="NODE_NOT_FOUND", message=f"Node not found: {node_id}")
     
-    in_degree = len(getattr(trace_idx, "_edges_by_target", {}).get(node_id, []) or [])
-    out_degree = len(getattr(trace_idx, "_edges_by_source", {}).get(node_id, []) or [])
+    in_degree, out_degree = trace_idx.node_degree(node_id)
     return ok({"node": node, "in_degree": in_degree, "out_degree": out_degree})
 
 

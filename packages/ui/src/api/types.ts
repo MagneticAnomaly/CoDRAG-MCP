@@ -75,7 +75,8 @@ export type AssembleContextResponse =
 export interface CreateProjectRequest {
   path: string;
   name?: string;
-  mode?: 'standalone' | 'embedded';
+  mode?: 'standalone' | 'embedded' | 'custom';
+  index_path?: string;
 }
 
 export interface CreateProjectResponse {

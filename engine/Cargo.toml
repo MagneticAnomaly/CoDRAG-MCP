@@ -1,0 +1,24 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/codrag-walker",
+    "crates/codrag-parser",
+    "crates/codrag-graph",
+    "crates/codrag-engine",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["CoDRAG Team"]
+
+[workspace.dependencies]
+# Shared deps pinned at workspace level
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rayon = "1.10"
+blake3 = "1"
+ignore = "0.4"
+thiserror = "2"
+log = "0.4"

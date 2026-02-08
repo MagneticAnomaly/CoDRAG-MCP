@@ -1,4 +1,5 @@
-# CoDRAG
+<h1 align="center">CoDRAG</h1>
+<h2 align="center"><em>The bridge between how you think about code and how AI reads it.</em></h2>
 
 **Code Documentation and RAG** — Local-first codebase intelligence for developers and AI coding agents.
 

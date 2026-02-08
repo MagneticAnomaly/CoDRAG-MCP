@@ -1,3 +1,5 @@
+"use client";
+
 import { FeatureBlocks } from '@codrag/ui';
 import { CreditCard, RefreshCw, Mail, HelpCircle } from 'lucide-react';
 
@@ -39,9 +41,10 @@ export default function Page() {
     <main className="min-h-screen bg-background text-text">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-16">
         <div className="text-center mb-16">
-          <h1 className="text-4xl font-bold tracking-tight mb-4">Payments & Licensing</h1>
+          <h1 className="text-4xl font-bold tracking-tight mb-4">Payments &amp; Licensing</h1>
           <p className="text-xl text-text-muted max-w-2xl mx-auto">
-            Purchase CoDRAG licenses and recover them if you lose your key.
+            Purchase a CoDRAG license, manage your subscription, or recover an existing key.
+            All licenses are verified offline after a single activation — no recurring phone-home.
           </p>
         </div>
 
@@ -49,16 +52,16 @@ export default function Page() {
 
         <div className="mt-16 flex justify-center gap-4">
           <a
-            href="https://codrag.io"
+            href="https://codrag.io/pricing"
             className="inline-flex items-center rounded-md border border-border px-4 py-2 text-sm font-medium text-text hover:bg-surface-raised transition-colors"
           >
-            Back to codrag.io
+            View Pricing
           </a>
           <a
             href="https://docs.codrag.io"
             className="inline-flex items-center rounded-md border border-border px-4 py-2 text-sm font-medium text-text hover:bg-surface-raised transition-colors"
           >
-            Read docs
+            Documentation
           </a>
         </div>
       </div>

@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import GridLayout from 'react-grid-layout';
 import type { Layout } from 'react-grid-layout';
 import type { ReactNode } from 'react';
 import { cn } from '../../lib/utils';
 import type { DashboardLayout, GridLayoutItem, PanelDefinition } from '../../types/layout';
-import { toGridLayout, fromGridLayout } from '../../types/layout';
+import { toGridLayout, fromGridLayout, computeGridCols, BASE_COLS } from '../../types/layout';
 
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -13,23 +13,28 @@ export interface DashboardGridProps {
   layout: DashboardLayout;
   panelDefinitions?: PanelDefinition[];
   onLayoutChange: (layout: DashboardLayout) => void;
+  onColsChange?: (prevCols: number, newCols: number) => void;
   children: ReactNode;
   className?: string;
   rowHeight?: number;
   margin?: [number, number];
+  maxColWidth?: number;
 }
 
 export function DashboardGrid({
   layout,
   panelDefinitions,
   onLayoutChange,
+  onColsChange,
   children,
   className,
   rowHeight = 20,
   margin = [24, 24],
+  maxColWidth = 120,
 }: DashboardGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(1200);
+  const prevColsRef = useRef<number>(BASE_COLS);
 
   // Measure container width
   useEffect(() => {
@@ -44,6 +49,21 @@ export function DashboardGrid({
     observer.observe(containerRef.current);
     return () => observer.disconnect();
   }, []);
+
+  // Compute dynamic column count from measured width
+  const cols = useMemo(
+    () => computeGridCols(width, margin[0], maxColWidth),
+    [width, margin, maxColWidth],
+  );
+
+  // Detect column count changes and notify parent
+  useEffect(() => {
+    const prev = prevColsRef.current;
+    if (prev !== cols) {
+      prevColsRef.current = cols;
+      onColsChange?.(prev, cols);
+    }
+  }, [cols, onColsChange]);
 
   // Convert our layout format to react-grid-layout format
   const gridLayout = toGridLayout(layout, panelDefinitions);
@@ -71,11 +91,14 @@ export function DashboardGrid({
   );
 
   return (
-    <div ref={containerRef} className={cn('codrag-dashboard-grid w-full', className)}>
+    <div
+      ref={containerRef}
+      className={cn('codrag-dashboard-grid w-full overflow-x-hidden', className)}
+    >
       <GridLayout
         className="layout"
         layout={gridLayout}
-        cols={12}
+        cols={cols}
         rowHeight={rowHeight}
         width={width}
         margin={margin}
@@ -85,7 +108,7 @@ export function DashboardGrid({
         onResizeStop={handleLayoutCommit}
         draggableHandle=".drag-handle"
         isResizable={true}
-        resizeHandles={['s']}
+        resizeHandles={['s', 'e', 'se']}
         compactType="vertical"
         preventCollision={false}
         useCSSTransforms={true}

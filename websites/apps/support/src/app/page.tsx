@@ -1,3 +1,5 @@
+"use client";
+
 import { FeatureBlocks } from '@codrag/ui';
 import { HelpCircle, Bug, MessageSquare, CreditCard, Mail, Shield } from 'lucide-react';
 
@@ -55,7 +57,7 @@ export default function Page() {
         <div className="text-center mb-16">
           <h1 className="text-4xl font-bold tracking-tight mb-4">Support Center</h1>
           <p className="text-xl text-text-muted max-w-2xl mx-auto">
-            Get help with CoDRAG, report bugs, ask questions, or contact us.
+            Get help with setup, troubleshoot builds, report issues, or reach the team directly.
           </p>
         </div>
 

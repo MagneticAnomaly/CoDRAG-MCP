@@ -65,9 +65,9 @@ function CenteredHero() {
 
         {/* Subheadline */}
         <p className="mt-6 text-lg md:text-xl text-text-muted max-w-2xl mx-auto leading-relaxed">
-          CoDRAG indexes your entire codebase locally — semantics, symbols, and call
-          graphs — then feeds the right context to Cursor, Windsurf, and Claude Desktop.
-          No cloud. No token markup. Just better AI output.
+          CoDRAG's Rust-powered engine indexes your entire codebase locally — semantics, symbols,
+          and call graphs — then feeds the right context to Cursor, Windsurf, and Claude Desktop.
+          No cloud upload. Works standalone or with Ollama. Just better AI output.
         </p>
 
         {/* CTAs */}
@@ -86,7 +86,7 @@ function CenteredHero() {
             <Zap className="w-4 h-4 text-success" /> Works offline
           </span>
           <span className="flex items-center gap-2">
-            <Database className="w-4 h-4 text-success" /> BYOK — no token markup
+            <Database className="w-4 h-4 text-success" /> No LLM required — Ollama optional
           </span>
           <span className="flex items-center gap-2">
             <Lock className="w-4 h-4 text-success" /> Perpetual license available
@@ -141,14 +141,14 @@ function NeoBrutalistHero() {
           
           <h1 className="text-5xl md:text-7xl font-bold text-text leading-none uppercase tracking-tighter">
             Your AI<br/>
-            Is Flying<br/>
-            <span className="bg-primary text-white px-2">Blind.</span><br/>
+            Sees Code.<br/>
+            <span className="bg-primary text-white px-2">Not Structure.</span><br/>
             Fix That.
           </h1>
           
           <p className="mt-6 text-xl text-text font-mono border-l-4 border-primary pl-4">
-            CoDRAG gives your AI tools a structural map of your entire codebase.
-            Local indexing. Zero cloud. Dramatically fewer hallucinations.
+            CoDRAG adds the structural layer your AI tools are missing.
+            Imports, calls, symbol graphs — indexed in Rust, instantly served.
           </p>
 
           <div className="mt-8 flex flex-col sm:flex-row gap-4">
@@ -209,11 +209,11 @@ function SwissHero() {
           <div className="mt-12 grid grid-cols-2 gap-8 border-t border-text pt-6">
             <div>
               <p className="text-sm font-bold uppercase mb-2 flex items-center gap-2"><Hash className="w-4 h-4" /> Problem</p>
-              <p className="text-lg leading-snug text-text-muted">AI coding tools hallucinate because they can’t see your full codebase.</p>
+              <p className="text-lg leading-snug text-text-muted">AI coding tools index your files but miss how code connects — imports, calls, dependencies.</p>
             </div>
             <div>
               <p className="text-sm font-bold uppercase mb-2 flex items-center gap-2"><LayoutGrid className="w-4 h-4" /> Solution</p>
-              <p className="text-lg leading-snug text-text-muted">Local semantic + structural indexing that feeds perfect context to every AI tool you use.</p>
+              <p className="text-lg leading-snug text-text-muted">Rust-powered semantic + structural indexing that feeds perfect context to every AI tool you use.</p>
             </div>
           </div>
         </div>
@@ -251,8 +251,8 @@ function GlassHero() {
           </h1>
           
           <p className="text-xl text-text-muted mb-8 max-w-2xl mx-auto">
-            CoDRAG sits between your codebase and your AI tools, delivering
-            structurally-aware context that eliminates hallucinations. Runs entirely on your machine.
+            CoDRAG sits between your codebase and your AI tools, adding the
+            structural understanding they lack — powered by a Rust backend built for speed. Better context in, better code out. Runs entirely on your machine.
           </p>
 
           <Flex className="gap-4" justifyContent="center">
@@ -322,7 +322,7 @@ function RetroHero() {
           <p className="text-lg text-white font-mono leading-relaxed">
             <span className="text-success">BOOT SEQUENCE...</span><br/>
             &gt; SEMANTIC INDEX: <span className="text-success">ONLINE</span><br/>
-            &gt; TRACE GRAPH: <span className="text-success">MAPPED</span><br/>
+            &gt; TRACE ENGINE: <span className="text-success">RUST_CORE ONLINE</span><br/>
             &gt; CLOUD UPLOAD: <span className="text-error">BLOCKED</span><br/>
             &gt; MCP BRIDGE: <span className="text-info">CURSOR / WINDSURF / CLAUDE</span><br/><br/>
             <span className="animate-pulse flex items-center justify-center gap-2">_YOUR AI CAN SEE YOUR CODE NOW <Terminal className="w-4 h-4" /></span>
@@ -355,16 +355,16 @@ function SplitHero() {
         </h1>
 
         <p className="mt-6 text-lg text-text-muted leading-relaxed">
-          AI assistants hallucinate when they lack context. CoDRAG builds a semantic
-          and structural index of your entire codebase, then delivers exactly the right
-          context to your AI tools—locally and in under 100 ms.
+          AI tools already index your code — but they grab files, not relationships.
+          CoDRAG's Rust engine adds the structural layer: semantics, symbols, and call graphs.
+          The right context, delivered in under 100 ms.
         </p>
 
         <div className="mt-8 space-y-4">
           <FeaturePoint icon={<Search className="w-5 h-5 text-primary" />} text="Semantic search across every project you manage" />
-          <FeaturePoint icon={<Layers className="w-5 h-5 text-primary" />} text="Trace Index maps imports, calls, and symbol hierarchies" />
+          <FeaturePoint icon={<Layers className="w-5 h-5 text-primary" />} text="Rust-powered Trace Index maps imports, calls, and symbol hierarchies" />
           <FeaturePoint icon={<Zap className="w-5 h-5 text-primary" />} text="Sub-100ms results, works completely offline" />
-          <FeaturePoint icon={<Shield className="w-5 h-5 text-primary" />} text="Zero cloud upload — BYOK, no token markup" />
+          <FeaturePoint icon={<Shield className="w-5 h-5 text-primary" />} text="Zero cloud upload — works standalone, Ollama or cloud BYOK optional" />
         </div>
 
         <Flex className="mt-10 gap-4">
@@ -441,7 +441,7 @@ function StudioHero() {
           
           <div className="max-w-md bg-surface/80 backdrop-blur-sm p-6 border-l-4 border-primary mt-8">
             <p className="text-lg font-sans text-text leading-relaxed">
-              CoDRAG maps the semantics, symbols, and structure of your codebase
+              CoDRAG's Rust engine maps the semantics, symbols, and structure of your codebase
               so every AI prompt gets the context it needs. Local-first. Always.
             </p>
           </div>
@@ -489,7 +489,7 @@ function StudioHero() {
           <div className="absolute top-32 left-0 w-72 bg-surface-raised border border-border p-6 shadow-lg z-10">
             <h3 className="font-serif text-2xl italic mb-2 flex items-center gap-2"><Eye className="w-5 h-5" /> Structural Trace</h3>
             <p className="font-sans text-sm text-text-muted">
-              Maps imports, call graphs, and symbol hierarchies so AI understands how your code connects.
+              Rust-powered engine maps imports, call graphs, and symbol hierarchies so AI understands how your code connects.
             </p>
           </div>
 
@@ -521,17 +521,17 @@ function YaleHero() {
             </h1>
           </div>
           <div className="col-span-12 md:col-span-3 flex flex-col justify-end items-start md:items-end">
-            <span className="font-mono text-xs text-text-muted mb-2">RELEASE 2025.1</span>
-            <span className="font-mono text-xs text-text-muted">MACOS / WINDOWS</span>
+            <span className="font-mono text-xs text-text-muted mb-2">RELEASE 2026.1</span>
+            <span className="font-mono text-xs text-text-muted">MACOS / WINDOWS / LINUX</span>
           </div>
         </div>
 
         <div className="grid grid-cols-12 gap-x-6 pt-12">
-          {/* Column 1: Description */}
+          {/* Column 1: Description */} 
           <div className="col-span-12 md:col-span-3 md:col-start-4">
             <p className="font-sans text-base text-text leading-relaxed mb-6">
-              CoDRAG indexes your codebase locally—semantics, symbols, and call graphs—then
-              feeds precisely the right context to Cursor, Windsurf, and Claude Desktop. No cloud. No token markup.
+              CoDRAG's Rust-powered engine indexes your codebase locally—semantics, symbols, and call graphs—then
+              feeds precisely the right context to Cursor, Windsurf, and Claude. No cloud upload. LLM not required, but recommended for augmented embddings.
             </p>
             <a href="#" className="font-sans font-medium text-primary hover:underline underline-offset-4 decoration-2 flex items-center gap-1">
               Documentation <ArrowRight className="w-3 h-3" />
@@ -595,8 +595,8 @@ function FocusHero() {
         </h1>
 
         <p className="text-xl md:text-2xl text-text-muted max-w-2xl mx-auto mb-12 leading-relaxed font-medium">
-          CoDRAG indexes your entire codebase and feeds structurally-aware context
-          to Cursor, Windsurf, and Claude Desktop. Fewer hallucinations, faster iteration.
+          CoDRAG adds the structural context layer your AI tools are missing — a Rust-powered engine
+          so Cursor, Windsurf, and Claude Desktop get the right code, not just more code.
         </p>
 
         <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
@@ -619,7 +619,7 @@ function FocusHero() {
           <div className="bg-surface p-6 rounded-xl border border-border shadow-sm">
             <div className="w-12 h-12 bg-success/20 rounded-lg flex items-center justify-center text-2xl mb-4 text-success"><Lock className="w-6 h-6" /></div>
             <h3 className="font-bold text-lg text-text mb-2">100% Local</h3>
-            <p className="text-text-muted">Your code never leaves your machine. No cloud upload, no telemetry. BYOK means no token markup.</p>
+            <p className="text-text-muted">Your code never leaves your machine. No cloud upload, no telemetry. Works without any LLM — add Ollama or cloud keys optionally.</p>
           </div>
           <div className="bg-surface p-6 rounded-xl border border-border shadow-sm">
             <div className="w-12 h-12 bg-warning/20 rounded-lg flex items-center justify-center text-2xl mb-4 text-warning"><Zap className="w-6 h-6" /></div>
@@ -629,7 +629,7 @@ function FocusHero() {
           <div className="bg-surface p-6 rounded-xl border border-border shadow-sm">
             <div className="w-12 h-12 bg-primary/20 rounded-lg flex items-center justify-center text-2xl mb-4 text-primary"><Eye className="w-6 h-6" /></div>
             <h3 className="font-bold text-lg text-text mb-2">Structural Trace Index</h3>
-            <p className="text-text-muted">Goes beyond vector search. Maps imports, calls, and symbol hierarchies so AI sees how code connects.</p>
+            <p className="text-text-muted">Goes beyond vector search. A Rust engine maps imports, calls, and symbol hierarchies so AI sees how code connects.</p>
           </div>
         </div>
       </div>
@@ -663,9 +663,9 @@ function EnterpriseHero() {
               Give every engineer AI that understands your codebase.
             </h1>
             <p className="text-text-muted text-lg leading-relaxed">
-              CoDRAG Enterprise standardizes semantic + structural indexing across your
-              organization. Shared context layers accelerate onboarding, reduce AI hallucinations,
-              and keep all code on-premise.
+              CoDRAG Enterprise standardizes Rust-powered semantic + structural indexing across your
+              organization. Shared context layers accelerate onboarding, improve AI output
+              quality, and keep all code on-premise.
             </p>
           </div>
 

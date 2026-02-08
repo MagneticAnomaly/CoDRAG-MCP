@@ -1,3 +1,5 @@
+"use client";
+
 import { FeatureBlocks } from '@codrag/ui';
 import { Rocket, LayoutDashboard, Terminal, Plug, Wrench, LifeBuoy } from 'lucide-react';
 
@@ -47,7 +49,7 @@ export default function Page() {
       <div>
         <h1 className="text-4xl font-bold tracking-tight mb-4">CoDRAG Documentation</h1>
         <p className="text-xl text-text-muted">
-          Local-first semantic code search and codebase intelligence.
+          Everything you need to index your codebase, connect your AI tools, and get better output from every prompt.
         </p>
       </div>
 

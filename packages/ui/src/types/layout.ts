@@ -66,19 +66,23 @@ export interface GridLayoutItem {
  * Default layout configuration
  */
 export const DEFAULT_LAYOUT: DashboardLayout = {
-  version: 5,
+  version: 8,
   panels: [
-    { id: 'status', visible: true, height: 6, collapsed: false, x: 0, y: 0, w: 8 },
-    { id: 'build', visible: true, height: 7, collapsed: false, x: 0, y: 6, w: 8 },
-    { id: 'search', visible: true, height: 9, collapsed: false, x: 0, y: 13, w: 8 },
-    { id: 'results', visible: true, height: 8, collapsed: false, x: 0, y: 22, w: 8 },
-    { id: 'roots', visible: true, height: 10, collapsed: false, x: 8, y: 0, w: 4 },
-    { id: 'context-options', visible: true, height: 12, collapsed: false, x: 8, y: 10, w: 4 },
-    { id: 'context-output', visible: true, height: 8, collapsed: false, x: 8, y: 22, w: 4 },
-    { id: 'llm-status', visible: true, height: 4, collapsed: false, x: 0, y: 30, w: 4 },
-    { id: 'settings', visible: true, height: 2, collapsed: true, x: 4, y: 30, w: 4 },
-    { id: 'file-tree', visible: false, height: 10, collapsed: false, x: 8, y: 32, w: 4 },
-    { id: 'pinned-files', visible: false, height: 10, collapsed: false, x: 0, y: 34, w: 8 },
+    // Top row — 4 panels across (12 cols: 2+3+3+4)
+    { id: 'status', visible: true, height: 6, collapsed: false, x: 0, y: 0, w: 2 },
+    { id: 'build', visible: true, height: 6, collapsed: false, x: 2, y: 0, w: 3 },
+    { id: 'context-options', visible: true, height: 10, collapsed: false, x: 5, y: 0, w: 3 },
+    { id: 'context-output', visible: true, height: 10, collapsed: false, x: 8, y: 0, w: 4 },
+    // Middle — tall file tree left, search + results right
+    { id: 'roots', visible: true, height: 20, collapsed: false, x: 0, y: 6, w: 5 },
+    { id: 'search', visible: true, height: 7, collapsed: false, x: 5, y: 10, w: 7 },
+    { id: 'results', visible: true, height: 10, collapsed: false, x: 5, y: 17, w: 7 },
+    // Bottom row
+    { id: 'llm-status', visible: true, height: 6, collapsed: false, x: 5, y: 27, w: 3 },
+    { id: 'settings', visible: true, height: 16, collapsed: true, x: 8, y: 27, w: 4 },
+    // Hidden by default
+    { id: 'file-tree', visible: false, height: 10, collapsed: false, x: 0, y: 28, w: 4 },
+    { id: 'pinned-files', visible: false, height: 10, collapsed: false, x: 4, y: 28, w: 8 },
   ],
 };
 
@@ -124,9 +128,9 @@ export function toGridLayout(layout: DashboardLayout, definitions?: PanelDefinit
       const x = typeof panel.x === 'number' ? panel.x : (defaultPanel?.x ?? 0);
       const w = typeof panel.w === 'number' ? panel.w : (defaultPanel?.w ?? 12);
       const y = typeof panel.y === 'number' ? panel.y : nextY;
-      const h = panel.collapsed ? 1 : Math.max(1, panel.height);
-      const minH = def?.minHeight ?? 1;
-      const isResizable = def?.resizable ?? true;
+      const h = panel.collapsed ? 2 : Math.max(2, panel.height);
+      const minH = panel.collapsed ? 2 : Math.max(2, def?.minHeight ?? 2);
+      const isResizable = panel.collapsed ? false : (def?.resizable ?? true);
 
       result.push({
         i: panel.id,
@@ -145,6 +149,125 @@ export function toGridLayout(layout: DashboardLayout, definitions?: PanelDefinit
   return result;
 }
 /**
+ * Base column count for the dashboard grid.
+ * The grid dynamically adds columns on the sides when the window is wide enough.
+ */
+export const BASE_COLS = 12;
+
+/**
+ * Compute how many grid columns to use for a given container width.
+ * Columns grow wider until they exceed maxColWidth, then we add 2 more
+ * (one on each side) and repeat.
+ *
+ * @returns An even number >= BASE_COLS
+ */
+export function computeGridCols(
+  width: number,
+  marginX: number,
+  maxColWidth: number = 120,
+): number {
+  // colWidth = (width - margin * (cols + 1)) / cols
+  // We want colWidth <= maxColWidth:
+  //   (width - margin * (cols + 1)) / cols <= maxColWidth
+  //   width - margin <= cols * (maxColWidth + margin)
+  //   cols >= (width - margin) / (maxColWidth + margin)
+  const minCols = Math.ceil((width - marginX) / (maxColWidth + marginX));
+
+  if (minCols <= BASE_COLS) return BASE_COLS;
+
+  // Round up to BASE_COLS + even number (symmetric: 1 col added per side)
+  const extra = minCols - BASE_COLS;
+  const roundedExtra = extra % 2 === 0 ? extra : extra + 1;
+  return BASE_COLS + roundedExtra;
+}
+
+/**
+ * Adjust panel positions when the grid column count changes.
+ *
+ * When cols increases the panels are shifted right so empty columns
+ * appear symmetrically on the left and right. When cols decreases the
+ * panels are shifted left and any that fall outside the new bounds are
+ * clamped. react-grid-layout's vertical compaction will resolve any
+ * overlaps introduced by clamping.
+ */
+export function adjustLayoutForColChange(
+  layout: DashboardLayout,
+  prevCols: number,
+  newCols: number,
+): DashboardLayout {
+  if (prevCols === newCols) return layout;
+
+  const delta = Math.floor((newCols - prevCols) / 2);
+
+  return {
+    ...layout,
+    panels: layout.panels.map((panel) => {
+      if (!panel.visible) return panel;
+
+      const w = Math.min(panel.w ?? BASE_COLS, newCols);
+      const rawX = (panel.x ?? 0) + delta;
+      const x = Math.max(0, Math.min(rawX, newCols - w));
+
+      return { ...panel, x, w };
+    }),
+  };
+}
+
+/**
+ * Reflow layout so all panels fit within a given column count.
+ *
+ * Panels are sorted by visual position (y then x), then placed row by row.
+ * A panel that would overflow the current row wraps to the next one.
+ * Hidden panels are preserved unchanged.
+ */
+export function reflowLayout(
+  layout: DashboardLayout,
+  cols: number = 12
+): DashboardLayout {
+  const visible = layout.panels.filter((p) => p.visible);
+  const hidden = layout.panels.filter((p) => !p.visible);
+
+  // Sort by y then x to preserve visual reading order
+  const sorted = [...visible].sort((a, b) => {
+    const ay = a.y ?? 0;
+    const by = b.y ?? 0;
+    if (ay !== by) return ay - by;
+    return (a.x ?? 0) - (b.x ?? 0);
+  });
+
+  let currentX = 0;
+  let currentY = 0;
+  let rowMaxH = 0;
+
+  const reflowed: PanelConfig[] = sorted.map((panel) => {
+    const w = Math.min(panel.w ?? cols, cols);
+
+    if (currentX + w > cols) {
+      // Wrap to next row
+      currentY += rowMaxH;
+      currentX = 0;
+      rowMaxH = 0;
+    }
+
+    const result: PanelConfig = {
+      ...panel,
+      x: currentX,
+      y: currentY,
+      w,
+    };
+
+    currentX += w;
+    rowMaxH = Math.max(rowMaxH, panel.height);
+    return result;
+  });
+
+  return {
+    ...layout,
+    panels: [...reflowed, ...hidden],
+  };
+}
+
+/**
  * Update DashboardLayout from react-grid-layout changes
  */
 export function fromGridLayout(
@@ -160,11 +283,16 @@ export function fromGridLayout(
   
   const updatedPanels: PanelConfig[] = sorted.map(item => {
     const existing = current.panels.find(p => p.id === item.i);
+    const isCollapsed = existing?.collapsed ?? false;
     return {
       id: item.i,
       visible: true,
-      height: item.h,
-      collapsed: existing?.collapsed ?? false,
+      // Keep the stored height when collapsed — the grid h=2 is just a display value
+      height: isCollapsed ? (existing?.height ?? item.h) : item.h,
+      collapsed: isCollapsed,
+      x: item.x,
+      y: item.y,
+      w: item.w,
     };
   });
   

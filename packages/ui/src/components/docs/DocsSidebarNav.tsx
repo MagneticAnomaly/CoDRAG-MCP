@@ -19,7 +19,7 @@ export function DocsSidebarNav({ items, className }: DocsSidebarNavProps) {
       <ul className="space-y-4">
         {items.map((section, idx) => (
           <li key={idx}>
-            <h4 className="font-medium text-sm text-text mb-2 px-2">
+            <h4 className="font-semibold text-xs uppercase tracking-wider text-text-subtle mb-3 px-2">
               {section.title}
             </h4>
             {section.children && (

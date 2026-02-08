@@ -27,6 +27,13 @@ from .ids import (
 
 logger = logging.getLogger(__name__)
 
+# --- Rust engine availability (set in __init__.py) ---
+try:
+    from . import ENGINE as _ENGINE, _rust_engine
+except ImportError:
+    _ENGINE = "python"
+    _rust_engine = None
+
 TRACE_MANIFEST_VERSION = "1.0"
 
 PYTHON_EXTENSIONS = {".py"}
@@ -402,6 +409,9 @@ class TraceBuilder:
     ) -> Dict[str, Any]:
         self.index_dir.mkdir(parents=True, exist_ok=True)
 
+        if _ENGINE == "rust" and _rust_engine is not None:
+            return self._build_rust(progress_callback)
+
         files = self._enumerate_files()
         if len(files) > self.max_files:
             logger.warning(f"File count {len(files)} exceeds max_files {self.max_files}, truncating")
@@ -500,6 +510,70 @@ class TraceBuilder:
 
         if progress_callback:
             progress_callback("trace_write", len(files), len(files))
+
+        return manifest
+
+    def _build_rust(
+        self,
+        progress_callback: Optional[Callable[[str, int, int], None]] = None,
+    ) -> Dict[str, Any]:
+        """Delegate trace build to the Rust engine via codrag_engine."""
+        import time
+
+        logger.info("Building trace index via Rust engine")
+        start = time.monotonic()
+
+        if progress_callback:
+            progress_callback("trace_scan", 0, 1)
+
+        try:
+            handle = _rust_engine.build_trace(
+                str(self.repo_root),
+                str(self.index_dir),
+                include_globs=self.include_globs,
+                exclude_globs=self.exclude_globs,
+                max_file_bytes=self.max_file_bytes,
+            )
+        except Exception as e:
+            logger.error(f"Rust engine build failed: {e}")
+            manifest = self._build_manifest(
+                nodes_count=0,
+                edges_count=0,
+                files_parsed=0,
+                files_failed=0,
+                file_errors=[],
+                last_error=str(e),
+            )
+            self._write_manifest(manifest)
+            return manifest
+
+        elapsed = time.monotonic() - start
+        status = handle.status()
+        counts = status.get("counts", {})
+
+        logger.info(
+            "Rust engine build complete: %d nodes, %d edges in %.3fs",
+            counts.get("nodes", 0),
+            counts.get("edges", 0),
+            elapsed,
+        )
+
+        if progress_callback:
+            progress_callback("trace_write", 1, 1)
+
+        # Read the manifest the Rust engine wrote
+        try:
+            with open(self.manifest_path, "r", encoding="utf-8") as f:
+                manifest = json.load(f)
+        except Exception:
+            manifest = {
+                "version": TRACE_MANIFEST_VERSION,
+                "built_at": status.get("last_build_at", ""),
+                "project": {"repo_root": str(self.repo_root)},
+                "counts": counts,
+                "file_errors": [],
+                "last_error": None,
+            }
 
         return manifest
 
@@ -655,6 +729,7 @@ class TraceBuilder:
 class TraceIndex:
     """
     Query interface for a built trace index.
+    Uses Rust TraceHandle when CODRAG_ENGINE=rust, else Python dicts.
     """
 
     def __init__(self, index_dir: Path):
@@ -669,6 +744,7 @@ class TraceIndex:
         self._edges_by_source: Dict[str, List[Dict[str, Any]]] = {}
         self._edges_by_target: Dict[str, List[Dict[str, Any]]] = {}
         self._loaded = False
+        self._rust_handle = None  # Rust TraceHandle when using Rust engine
 
     def exists(self) -> bool:
         return self.manifest_path.exists() and self.nodes_path.exists() and self.edges_path.exists()
@@ -677,6 +753,27 @@ class TraceIndex:
         if not self.exists():
             return False
 
+        if _ENGINE == "rust" and _rust_engine is not None:
+            return self._load_rust()
+
+        return self._load_python()
+
+    def _load_rust(self) -> bool:
+        """Load trace index via Rust engine — much faster than Python JSONL parsing."""
+        try:
+            self._rust_handle = _rust_engine.load_trace(str(self.index_dir))
+            with open(self.manifest_path, "r", encoding="utf-8") as f:
+                self._manifest = json.load(f)
+            self._loaded = True
+            logger.debug("Loaded trace index via Rust engine: %d nodes", self._rust_handle.node_count())
+            return True
+        except Exception as e:
+            logger.error(f"Rust engine load failed, falling back to Python: {e}")
+            self._rust_handle = None
+            return self._load_python()
+
+    def _load_python(self) -> bool:
+        """Original Python JSONL loading — used as fallback."""
         try:
             with open(self.manifest_path, "r", encoding="utf-8") as f:
                 self._manifest = json.load(f)
@@ -712,6 +809,17 @@ class TraceIndex:
     def is_loaded(self) -> bool:
         return self._loaded
 
+    def node_degree(self, node_id: str) -> Tuple[int, int]:
+        """Return (in_degree, out_degree) for a node. Works with both Rust and Python backends."""
+        if not self._loaded:
+            self.load()
+        if self._rust_handle is not None:
+            result = self._rust_handle.get_neighbors(node_id, direction="both", max_nodes=10000)
+            return (len(result.in_edges), len(result.out_edges))
+        in_deg = len(self._edges_by_target.get(node_id, []))
+        out_deg = len(self._edges_by_source.get(node_id, []))
+        return (in_deg, out_deg)
+
     def status(self) -> Dict[str, Any]:
         if not self.exists():
             return {
@@ -725,6 +833,9 @@ class TraceIndex:
 
         if not self._loaded:
             self.load()
+
+        if self._rust_handle is not None:
+            return self._rust_handle.status()
 
         manifest = self._manifest or {}
         counts = manifest.get("counts", {})
@@ -740,11 +851,18 @@ class TraceIndex:
     def get_node(self, node_id: str) -> Optional[Dict[str, Any]]:
         if not self._loaded:
             self.load()
+        if self._rust_handle is not None:
+            n = self._rust_handle.get_node(node_id)
+            return n.to_dict() if n else None
         return self._nodes.get(node_id)
 
     def search_nodes(self, query: str, kind: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
         if not self._loaded:
             self.load()
+
+        if self._rust_handle is not None:
+            results = self._rust_handle.search(query, kind=kind, limit=limit)
+            return [r.to_dict() for r in results]
 
         query_lower = query.lower()
         results: List[Tuple[float, Dict[str, Any]]] = []
@@ -781,6 +899,17 @@ class TraceIndex:
     ) -> Dict[str, Any]:
         if not self._loaded:
             self.load()
+
+        if self._rust_handle is not None:
+            result = self._rust_handle.get_neighbors(
+                node_id, direction=direction, edge_kinds=edge_kinds, max_nodes=max_nodes
+            )
+            return {
+                "in_edges": [e.to_dict() for e in result.in_edges],
+                "out_edges": [e.to_dict() for e in result.out_edges],
+                "in_nodes": [n.to_dict() for n in result.in_nodes],
+                "out_nodes": [n.to_dict() for n in result.out_nodes],
+            }
 
         in_edges: List[Dict[str, Any]] = []
         out_edges: List[Dict[str, Any]] = []

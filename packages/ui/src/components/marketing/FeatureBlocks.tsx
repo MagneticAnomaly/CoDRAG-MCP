@@ -155,7 +155,7 @@ export const codragFeatures: Feature[] = [
   {
     icon: <GitBranch className="w-8 h-8" />,
     title: 'Structural Trace Index',
-    description: 'Goes beyond vector search. CoDRAG maps imports, call graphs, and symbol hierarchies so your AI sees how code connects—not just where keywords appear.',
+    description: 'Goes beyond vector search. A Rust-powered engine maps imports, call graphs, and symbol hierarchies so your AI sees how code connects—not just where keywords appear.',
     badge: 'Pro',
     highlight: true,
   },
@@ -167,12 +167,12 @@ export const codragFeatures: Feature[] = [
   {
     icon: <Lock className="w-8 h-8" />,
     title: 'Runs 100% on Your Machine',
-    description: 'Your code never leaves localhost. No cloud upload, no telemetry, no API-key markup. Bring your own Ollama—CoDRAG never charges you for tokens.',
+    description: 'Your code never leaves localhost. No cloud upload, no telemetry. CoDRAG\'s trace index works without any LLM — optionally add Ollama or your own cloud API for semantic embeddings.',
   },
   {
     icon: <RefreshCw className="w-8 h-8" />,
     title: 'Always-Fresh Index',
-    description: 'A real-time file watcher detects edits and rebuilds incrementally. Your search results and AI context are never stale.',
+    description: 'A real-time file watcher detects edits and rebuilds incrementally in Rust — so your search results and AI context are never stale.',
   },
   {
     icon: <Plug className="w-8 h-8" />,
@@ -185,18 +185,18 @@ export const codragFeatures: Feature[] = [
 export const marketingFeatures: Feature[] = [
   {
     icon: <AlertTriangle className="w-8 h-8" />,
-    title: 'The Problem: AI Can\'t See Your Codebase',
-    description: 'Every AI coding assistant hallucinates when it lacks context. You waste time fixing bad suggestions, re-explaining architecture, and manually pasting files into chat windows.',
+    title: 'The Problem: AI Sees Files, Not Structure',
+    description: 'AI coding tools already index your repo — but they grab files without understanding how code connects. You waste time re-explaining architecture, correcting wrong assumptions, and pasting missing context.',
     highlight: true,
   },
   {
     icon: <Lightbulb className="w-8 h-8" />,
     title: 'The Fix: Give AI a Structural Map',
-    description: 'CoDRAG indexes your entire codebase—semantics, symbols, and call graphs—then assembles exactly the right context for every prompt, automatically.',
+    description: 'CoDRAG\'s Rust-powered engine indexes your entire codebase—semantics, symbols, and call graphs—then assembles exactly the right context for every prompt, automatically.',
   },
   {
     icon: <TrendingUp className="w-8 h-8" />,
     title: 'The Result: AI That Actually Gets It',
-    description: 'Fewer hallucinations, fewer re-prompts, faster iteration. Developers using structured context report dramatically better AI output across Cursor, Windsurf, and Copilot.',
+    description: 'More relevant suggestions, fewer corrections, faster iteration. Developers using structured context report dramatically better AI output across Cursor, Windsurf, and Claude Desktop.',
   },
 ];

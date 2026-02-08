@@ -1,10 +1,10 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import { DocsLayout } from '@codrag/ui';
-import { docsSidebar } from '../config/docs';
 
 import '@codrag/ui/styles';
 import './globals.css';
+
+import { ClientLayout } from './ClientLayout';
 
 export const metadata: Metadata = {
   title: 'CoDRAG Documentation',
@@ -13,32 +13,9 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" data-codrag-theme="a">
+    <html lang="en" data-codrag-theme="k">
       <body className="bg-background text-text selection:bg-primary/20">
-        <DocsLayout
-          headerProps={{
-            productName: 'CoDRAG Docs',
-            links: [
-              { label: 'Home', href: 'https://codrag.io' },
-              { label: 'Download', href: 'https://codrag.io/download' },
-              { label: 'Support', href: 'https://support.codrag.io' },
-            ],
-            searchPlaceholder: 'Search documentation...',
-            onSearch: (query) => {
-              window.location.href = `/search?q=${encodeURIComponent(query)}`;
-            },
-          }}
-          footerProps={{
-            productName: 'CoDRAG',
-            socials: {
-              github: 'https://github.com/EricBintner/CoDRAG',
-              email: 'docs@codrag.io',
-            },
-          }}
-          sidebarItems={docsSidebar}
-        >
-          {children}
-        </DocsLayout>
+        <ClientLayout>{children}</ClientLayout>
       </body>
     </html>
   );

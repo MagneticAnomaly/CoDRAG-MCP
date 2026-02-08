@@ -1,18 +1,22 @@
+"use client";
+
+import { Button } from '@codrag/ui';
+
 export default function Page() {
   return (
     <main className="min-h-screen bg-background text-text">
-      <div className="mx-auto max-w-5xl px-6 py-16">
+      <div className="mx-auto max-w-7xl px-6 py-16">
         <a href="/" className="text-sm text-text-muted hover:text-text transition-colors">
           ← Home
         </a>
 
-        <div className="mt-6 text-center">
-          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
+        <div className="mt-12 text-center max-w-3xl mx-auto">
+          <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
             Simple, honest pricing
           </h1>
-          <p className="mt-4 text-lg text-text-muted max-w-2xl mx-auto">
-            Local-first means your code stays yours. BYOK means we never charge you for AI tokens.
-            Pay once for Pro and own it forever.
+          <p className="mt-6 text-xl text-text-muted leading-relaxed">
+            Local-first means your code stays yours. CoDRAG’s trace index works without any LLM —
+            add Ollama or cloud embeddings when you want semantic search. Pay once for Pro and own it forever.
           </p>
         </div>
 
@@ -50,12 +54,9 @@ export default function Page() {
                 <span className="text-text-muted">Manual indexing only (no file watcher)</span>
               </li>
             </ul>
-            <a
-              href="/download"
-              className="mt-6 inline-flex items-center justify-center rounded-md border border-border px-4 py-2 text-sm font-medium text-text hover:bg-surface-raised transition-colors"
-            >
-              Download Free
-            </a>
+            <Button asChild variant="outline" className="mt-6 w-full">
+              <a href="/download">Download Free</a>
+            </Button>
           </div>
 
           {/* Starter */}
@@ -90,12 +91,9 @@ export default function Page() {
                 <span>Dashboard GUI</span>
               </li>
             </ul>
-            <a
-              href="https://payments.codrag.io"
-              className="mt-6 inline-flex items-center justify-center rounded-md border border-border px-4 py-2 text-sm font-medium text-text hover:bg-surface-raised transition-colors"
-            >
-              Get Starter
-            </a>
+            <Button asChild variant="outline" className="mt-6 w-full">
+              <a href="https://payments.codrag.io">Get Starter</a>
+            </Button>
           </div>
 
           {/* Pro — highlighted */}
@@ -137,12 +135,9 @@ export default function Page() {
                 <span>Context compression (CLaRa)</span>
               </li>
             </ul>
-            <a
-              href="https://payments.codrag.io"
-              className="mt-6 inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-hover transition-colors"
-            >
-              Buy Pro License
-            </a>
+            <Button asChild className="mt-6 w-full">
+              <a href="https://payments.codrag.io">Buy Pro License</a>
+            </Button>
           </div>
         </div>
 
@@ -173,12 +168,9 @@ export default function Page() {
                 <span>License management dashboard</span>
               </li>
             </ul>
-            <a
-              href="https://payments.codrag.io"
-              className="mt-4 inline-flex items-center rounded-md border border-border px-4 py-2 text-sm font-medium text-text hover:bg-surface-raised transition-colors"
-            >
-              Start Team Trial
-            </a>
+            <Button asChild variant="outline" className="mt-4">
+              <a href="https://payments.codrag.io">Start Team Trial</a>
+            </Button>
           </div>
 
           <div className="rounded-xl border border-border bg-surface p-6">
@@ -204,12 +196,9 @@ export default function Page() {
                 <span>SSO, SCIM, and audit logging</span>
               </li>
             </ul>
-            <a
-              href="/contact"
-              className="mt-4 inline-flex items-center rounded-md border border-border px-4 py-2 text-sm font-medium text-text hover:bg-surface-raised transition-colors"
-            >
-              Contact Sales
-            </a>
+            <Button asChild variant="outline" className="mt-4">
+              <a href="/contact">Contact Sales</a>
+            </Button>
           </div>
         </div>
 
@@ -218,25 +207,19 @@ export default function Page() {
           <h2 className="text-xl font-semibold">Every plan includes</h2>
           <div className="flex flex-wrap justify-center gap-x-8 gap-y-2 text-sm text-text-muted">
             <span>100% local — no cloud upload</span>
-            <span>BYOK — no token markup</span>
+            <span>No LLM required — Ollama optional</span>
             <span>macOS & Windows</span>
             <span>MCP integration</span>
           </div>
         </div>
 
         <div className="mt-10 flex flex-wrap justify-center gap-3">
-          <a
-            href="/security"
-            className="inline-flex items-center rounded-md border border-border px-4 py-2 text-sm font-medium text-text hover:bg-surface transition-colors"
-          >
-            Security & Privacy
-          </a>
-          <a
-            href="/contact"
-            className="inline-flex items-center rounded-md border border-border px-4 py-2 text-sm font-medium text-text hover:bg-surface transition-colors"
-          >
-            Contact
-          </a>
+          <Button asChild variant="outline">
+            <a href="/security">Security &amp; Privacy</a>
+          </Button>
+          <Button asChild variant="outline">
+            <a href="/contact">Contact</a>
+          </Button>
         </div>
       </div>
     </main>

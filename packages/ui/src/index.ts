@@ -11,6 +11,7 @@ export type {
   CodeChunk, 
   ProjectSummary, 
   ProjectConfig, 
+  ProjectMode,
   LLMConfig, 
   SavedEndpoint, 
   EndpointTestResult,
@@ -51,10 +52,12 @@ export { ModelCard, EndpointManager, AIModelsSettings } from './components/llm';
 export { Button } from './components/primitives/Button';
 export { Select } from './components/primitives/Select';
 export type { SelectProps, SelectOption } from './components/primitives/Select';
+export { PathInput } from './components/primitives/PathInput';
+export type { PathInputProps, PathPickerMode } from './components/primitives/PathInput';
 
 // Components - Project
-export { FolderTree, sampleFileTree, ProjectSettingsPanel, FolderTreePanel, PinnedTextFilesPanel, AddProjectModal } from './components/project';
-export type { FolderTreeProps, TreeNode, FileStatus, ProjectSettingsPanelProps, FolderTreePanelProps, PinnedTextFilesPanelProps, PinnedTextFile, AddProjectModalProps } from './components/project';
+export { FolderTree, sampleFileTree, ProjectSettingsPanel, FolderTreePanel, PinnedTextFilesPanel, AddProjectModal, FilePreviewPane, FileExplorerDetail } from './components/project';
+export type { FolderTreeProps, TreeNode, FileStatus, ProjectSettingsPanelProps, FolderTreePanelProps, PinnedTextFilesPanelProps, PinnedTextFile, AddProjectModalProps, FilePreviewPaneProps, FileExplorerDetailProps } from './components/project';
 
 // Components - Watch (Phase 03)
 export { WatchStatusIndicator, WatchControlPanel } from './components/watch';
@@ -62,7 +65,7 @@ export type { WatchStatusIndicatorProps, WatchControlPanelProps } from './compon
 
 // Components - Layout (Modular Dashboard - Phase 15)
 export { PanelChrome, DashboardGrid, PanelPicker, ModularDashboard, useLayoutPersistence } from './components/layout';
-export type { PanelChromeProps, DashboardGridProps, PanelPickerProps, ModularDashboardProps, PanelContentMap } from './components/layout';
+export type { PanelChromeProps, DashboardGridProps, PanelPickerProps, ModularDashboardProps, PanelContentMap, DashboardLayoutApi } from './components/layout';
 
 // Components - Marketing & Site (Phase 12)
 export { MarketingHero, FeatureBlocks, codragFeatures, marketingFeatures } from './components/marketing';
@@ -83,7 +86,7 @@ export type {
   PanelProps, 
   GridLayoutItem 
 } from './types/layout';
-export { DEFAULT_LAYOUT, LAYOUT_STORAGE_KEY, toGridLayout, fromGridLayout } from './types/layout';
+export { DEFAULT_LAYOUT, LAYOUT_STORAGE_KEY, BASE_COLS, toGridLayout, fromGridLayout, reflowLayout, computeGridCols, adjustLayoutForColChange } from './types/layout';
 
 // Panel Registry (Phase 15)
 export { PANEL_REGISTRY, getPanelDefinition, getPanelsByCategory } from './config/panelRegistry';

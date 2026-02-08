@@ -41,7 +41,7 @@ function getThemeDefaultHeroVariant(theme: ThemeId): HeroVariant {
   if (theme === 'm' || theme === 'n') return 'retro';
   if (theme === 'i') return 'studio';
   if (theme === 'j') return 'yale';
-  if (theme === 'k') return 'focus';
+  if (theme === 'k') return 'yale';
   if (theme === 'l') return 'enterprise';
   if (theme === 'a' || theme === 'd') return 'centered';
   if (theme === 'b' || theme === 'c') return 'split';
@@ -69,7 +69,7 @@ export interface DevMarketingHeroProps {
   fallbackTheme?: ThemeId;
 }
 
-export function DevMarketingHero({ fallbackTheme = 'a' }: DevMarketingHeroProps) {
+export function DevMarketingHero({ fallbackTheme = 'k' }: DevMarketingHeroProps) {
   const showDevToolbar = process.env.NODE_ENV !== 'production';
 
   const [variant, setVariant] = useState<HeroVariant>(() => getThemeDefaultHeroVariant(fallbackTheme));

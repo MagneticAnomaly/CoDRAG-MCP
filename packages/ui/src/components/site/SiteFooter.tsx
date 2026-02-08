@@ -45,7 +45,7 @@ export function SiteFooter({
               {productName}
             </a>
             <Text className="text-sm text-text-muted leading-relaxed">
-              Local-first semantic search and context for the AI era. Your code stays yours.
+              The structural context layer for AI-assisted development. Your code stays yours.
             </Text>
             <div className="flex gap-4 pt-2">
               {socials?.twitter && (
@@ -120,7 +120,6 @@ const defaultSections: FooterSection[] = [
       { label: 'Blog', href: '/blog' },
       { label: 'Community', href: '/community' },
       { label: 'Help Center', href: 'https://support.codrag.io' },
-      { label: 'Status', href: '/status' },
     ],
   },
   {

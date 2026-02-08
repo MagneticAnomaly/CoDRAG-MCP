@@ -42,9 +42,15 @@ def default_registry_db_path() -> Path:
 
 
 def project_index_dir(project: Project) -> Path:
+    if project.mode == "custom":
+        idx_path = project.config.get("index_path")
+        if idx_path:
+            return Path(idx_path).expanduser().resolve()
+    
     project_root = Path(project.path).expanduser().resolve()
     if project.mode == "embedded":
         return project_root / ".codrag"
+    
     return codrag_data_dir() / "projects" / project.id
 
 

@@ -78,6 +78,11 @@ Thumbs.db
 *.log
 logs/
 
+# Rust (engine/)
+engine/target/
+*.dylib
+*.rlib
+
 # Secrets
 .env
 .env.local
