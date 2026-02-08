@@ -27,12 +27,12 @@ export function AppShell({
   return (
     <div className={cn('flex h-screen bg-background text-text overflow-hidden', className)}>
       {/* Sidebar */}
-      <div className="flex-shrink-0 z-20">
+      <div className="flex-shrink-0">
         {sidebar}
       </div>
       
       {/* Main area */}
-      <div className="flex-1 flex flex-col min-w-0 relative z-10 bg-background">
+      <div className="flex-1 flex flex-col min-w-0 relative bg-background">
         {/* Project tabs */}
         <div className="flex-shrink-0">
           {tabs}

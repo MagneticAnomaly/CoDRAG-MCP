@@ -161,6 +161,119 @@ export const StatusShowcase: Story = {
   },
 };
 
+export const ContextWeighting: Story = {
+  render: () => {
+    const [includedPaths, setIncludedPaths] = useState<Set<string>>(new Set([
+      'src',
+      'src/codrag',
+      'src/codrag/server.py',
+      'src/codrag/cli.py',
+      'src/codrag/__init__.py',
+      'src/codrag/core',
+      'src/codrag/core/registry.py',
+      'src/codrag/core/embedding.py',
+      'src/codrag/core/trace.py',
+      'src/codrag/core/watcher.py',
+      'src/codrag/api',
+      'src/codrag/api/routes.py',
+      'src/codrag/api/auth.py',
+      'docs',
+      'docs/ARCHITECTURE.md',
+      'docs/API.md',
+      'docs/ROADMAP.md',
+      'tests',
+      'tests/test_registry.py',
+      'tests/test_search.py',
+      'tests/conftest.py',
+    ]));
+
+    // Pre-seed with example weights: docs de-emphasized, core boosted
+    const [pathWeights, setPathWeights] = useState<Record<string, number>>({
+      'docs': 0.5,
+      'docs/ARCHITECTURE.md': 1.2,
+      'src/codrag/core': 1.5,
+      'tests': 0.8,
+    });
+
+    const handleToggleInclude = (paths: string[], action: 'add' | 'remove') => {
+      setIncludedPaths((prev) => {
+        const next = new Set(prev);
+        for (const p of paths) {
+          if (action === 'remove') next.delete(p);
+          else next.add(p);
+        }
+        return next;
+      });
+    };
+
+    const handleWeightChange = (path: string, weight: number | null) => {
+      setPathWeights((prev) => {
+        const next = { ...prev };
+        if (weight === null) {
+          delete next[path];
+        } else {
+          next[path] = weight;
+        }
+        return next;
+      });
+    };
+
+    return (
+      <div className="space-y-4">
+        <div className="p-3 bg-surface-raised rounded-lg border border-border">
+          <div className="text-xs text-text-subtle mb-1">Context Weighting</div>
+          <div className="text-sm text-text-muted space-y-1">
+            <div>• <strong>Hover any row</strong> → weight badge appears (×1.0 default)</div>
+            <div>• <strong>Click weight badge</strong> → edit weight (0.0–2.0)</div>
+            <div>• <strong>Folder weight</strong> → propagates to all children (shown in <em>italic</em>)</div>
+            <div>• <strong>Child override</strong> → overrides inherited weight (shown in normal text)</div>
+            <div>• <span className="text-warning">Amber ×0.5</span> = de-emphasized, <span className="text-success">Green ×1.5</span> = boosted</div>
+          </div>
+        </div>
+        <div className="text-xs text-text-subtle flex gap-4">
+          <span>Included: {includedPaths.size} paths</span>
+          <span>Weight overrides: {Object.keys(pathWeights).length}</span>
+        </div>
+        <FolderTree
+          data={sampleFileTree}
+          includedPaths={includedPaths}
+          onToggleInclude={handleToggleInclude}
+          pathWeights={pathWeights}
+          onWeightChange={handleWeightChange}
+        />
+        {Object.keys(pathWeights).length > 0 && (
+          <div className="p-3 bg-surface-raised rounded-lg border border-border">
+            <div className="text-xs text-text-subtle mb-1">Active Weight Overrides</div>
+            <div className="font-mono text-xs text-text-muted space-y-0.5">
+              {Object.entries(pathWeights).map(([p, w]) => (
+                <div key={p}>{p}: ×{w.toFixed(1)}</div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: `
+**Context Weighting** lets users control how much influence each folder/file has in search results.
+
+**Hierarchy:**
+- Set weight on a folder → all children inherit it
+- Override any child with its own weight
+- Reset overrides to re-inherit from parent
+
+**Weight scale:** 0.0 (excluded from results) to 2.0 (double importance). Default: 1.0.
+
+**Use case:** De-emphasize large docs folders (×0.5) so they provide background context without dominating search results, while boosting core source code (×1.5).
+        `,
+      },
+    },
+  },
+};
+
 export const FullHeight: Story = {
   args: {
     data: sampleFileTree,

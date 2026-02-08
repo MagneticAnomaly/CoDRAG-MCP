@@ -1,6 +1,6 @@
 export { ApiClientError } from './errors';
 export { CodragApiClient, createCodragApiClient } from './client';
-export type { ApiClient, ApiClientConfig } from './client';
+export type { ApiClient, ApiClientConfig, FileTreeNode } from './client';
 export { MockApiClient } from './mock';
 export { ApiClientProvider, useApiClient } from './react';
 export type {

@@ -38,6 +38,16 @@ export const docsSidebar: DocNode[] = [
     ],
   },
   {
+    title: 'Guides',
+    href: '/guides',
+    children: [
+      { title: 'Overview', href: '/guides' },
+      { title: 'Built-in Embeddings', href: '/guides/embeddings' },
+      { title: 'Context Compression (CLaRa)', href: '/guides/clara' },
+      { title: 'Path Weights', href: '/guides/path-weights' },
+    ],
+  },
+  {
     title: 'Integrations',
     href: '/mcp',
     children: [

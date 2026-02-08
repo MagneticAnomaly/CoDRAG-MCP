@@ -1,7 +1,7 @@
 "use client";
 
 import { FeatureBlocks } from '@codrag/ui';
-import { Rocket, LayoutDashboard, Terminal, Plug, Wrench, LifeBuoy } from 'lucide-react';
+import { Rocket, LayoutDashboard, Terminal, Plug, Wrench, LifeBuoy, BookOpen } from 'lucide-react';
 
 const docFeatures = [
   {
@@ -27,6 +27,12 @@ const docFeatures = [
     title: 'MCP Integration',
     description: 'Use CoDRAG from Cursor/Windsurf via MCP.',
     href: '/mcp',
+  },
+  {
+    icon: <BookOpen className="w-8 h-8" />,
+    title: 'Guides',
+    description: 'Embeddings, context compression, path weights, and more.',
+    href: '/guides',
   },
   {
     icon: <Wrench className="w-8 h-8" />,

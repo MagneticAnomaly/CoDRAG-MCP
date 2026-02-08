@@ -27,7 +27,7 @@ from pydantic import BaseModel
 
 from codrag import __version__
 from codrag.api.envelope import ApiException, install_api_exception_handlers, ok
-from codrag.core import CodeIndex, OllamaEmbedder
+from codrag.core import CodeIndex, OllamaEmbedder, NativeEmbedder, ClaraCompressor, NoopCompressor
 from codrag.core.project_registry import (
     Project,
     ProjectAlreadyExists,
@@ -35,9 +35,15 @@ from codrag.core.project_registry import (
     ProjectRegistry,
     project_index_dir,
 )
-from codrag.core.repo_policy import ensure_repo_policy
+from codrag.core.repo_policy import (
+    ensure_repo_policy,
+    load_repo_policy,
+    policy_path_for_index,
+    write_repo_policy,
+    _normalize_path_weights,
+)
 from codrag.core.repo_profile import profile_repo
-from codrag.core.trace import TraceBuilder, TraceIndex
+from codrag.core.trace import TraceBuilder, TraceIndex, compute_trace_coverage
 from codrag.core.watcher import AutoRebuildWatcher
 from codrag.mcp_config import generate_mcp_configs
 
@@ -88,7 +94,7 @@ _DEFAULT_UI_CONFIG: Dict[str, Any] = {
     "repo_root": "",
     "core_roots": [],
     "working_roots": [],
-    "include_globs": ["**/*.md", "**/*.py", "**/*.ts", "**/*.tsx", "**/*.js", "**/*.json"],
+    "include_globs": ["**/*.md", "**/*.py", "**/*.ts", "**/*.tsx", "**/*.js", "**/*.json", "**/*.swift", "**/*.jsx", "**/*.css", "**/*.scss", "**/*.html", "**/*.yaml", "**/*.yml", "**/*.toml", "**/*.cfg", "**/*.ini", "**/*.sh", "**/*.rs", "**/*.go", "**/*.java", "**/*.c", "**/*.cpp", "**/*.h", "**/*.hpp", "**/*.txt", "**/*.xml", "**/*.sql", "**/*.rb", "**/*.php", "**/*.kt", "**/*.scala", "**/*.r", "**/*.R", "**/*.m", "**/*.mm"],
     "exclude_globs": [
         "**/.git/**",
         "**/.venv/**",
@@ -134,7 +140,9 @@ def _default_ui_config() -> Dict[str, Any]:
             }
         ],
         "embedding": {
-            "source": "endpoint",
+            "source": "huggingface",
+            "hf_repo_id": "nomic-ai/nomic-embed-text-v1.5",
+            "hf_downloaded": NativeEmbedder().is_available(),
             "endpoint_id": "default_ollama",
             "model": model,
         },
@@ -568,6 +576,12 @@ class ContextRequest(BaseModel):
     include_scores: bool = False
     min_score: float = 0.15
     structured: bool = False
+    trace_expand: bool = False  # Follow trace edges to include structurally related code
+    trace_max_chars: int = 2000  # Budget for trace-expanded chunks
+    compression: str = "none"  # "none" | "clara"
+    compression_level: str = "standard"  # "light" | "standard" | "aggressive"
+    compression_target_chars: Optional[int] = None
+    compression_timeout_s: float = 30.0
 
 
 class TraceSearchRequest(BaseModel):
@@ -590,6 +604,11 @@ class AddProjectRequest(BaseModel):
 class UpdateProjectRequest(BaseModel):
     name: Optional[str] = None
     config: Optional[Dict[str, Any]] = None
+    path_weights: Optional[Dict[str, float]] = None
+
+
+class PathWeightsRequest(BaseModel):
+    path_weights: Dict[str, float]
 
 
 class LLMProxyRequest(BaseModel):
@@ -611,13 +630,40 @@ class LLMModelTestRequest(BaseModel):
 # Index Helpers
 # =============================================================================
 
+def _create_embedder(embedding_source: Optional[str] = None) -> "Embedder":
+    """Create the appropriate embedder based on configuration.
+
+    Priority:
+    1. If embedding_source == "ollama" → OllamaEmbedder
+    2. If embedding_source == "native" or None → NativeEmbedder (if deps available)
+    3. Fallback → OllamaEmbedder
+    """
+    source = embedding_source or _config.get("embedding_source", "native")
+
+    if source == "ollama":
+        ollama_url = _config.get("ollama_url", "http://localhost:11434")
+        model = _config.get("model", "nomic-embed-text")
+        logger.info("Using OllamaEmbedder (model=%s, url=%s)", model, ollama_url)
+        return OllamaEmbedder(model=model, base_url=ollama_url)
+
+    # Default: try native
+    native = NativeEmbedder()
+    if native.is_available():
+        logger.info("Using NativeEmbedder (nomic-embed-text-v1.5 via ONNX)")
+        return native
+
+    # Fallback to Ollama if native deps missing
+    logger.warning("NativeEmbedder deps not installed; falling back to OllamaEmbedder")
+    ollama_url = _config.get("ollama_url", "http://localhost:11434")
+    model = _config.get("model", "nomic-embed-text")
+    return OllamaEmbedder(model=model, base_url=ollama_url)
+
+
 def _get_index() -> CodeIndex:
     global _index
     if _index is None:
         index_dir = Path(_config.get("index_dir", "./codrag_data"))
-        ollama_url = _config.get("ollama_url", "http://localhost:11434")
-        model = _config.get("model", "nomic-embed-text")
-        embedder = OllamaEmbedder(model=model, base_url=ollama_url)
+        embedder = _create_embedder()
         _index = CodeIndex(index_dir=index_dir, embedder=embedder)
     return _index
 
@@ -680,9 +726,9 @@ def _get_project_index(project: Project) -> CodeIndex:
     idx = _project_indexes.get(project.id)
     idx_dir = project_index_dir(project)
     if idx is None or Path(idx.index_dir).resolve() != Path(idx_dir).resolve():
-        ollama_url = _config.get("ollama_url", "http://localhost:11434")
-        model = _config.get("model", "nomic-embed-text")
-        embedder = OllamaEmbedder(model=model, base_url=ollama_url)
+        # Check project-level embedding config, fall back to global
+        embedding_source = (project.config or {}).get("embedding_source")
+        embedder = _create_embedder(embedding_source)
         idx = CodeIndex(index_dir=idx_dir, embedder=embedder)
         _project_indexes[project.id] = idx
     return idx
@@ -828,6 +874,104 @@ def root() -> dict:
     }
 
 
+# =============================================================================
+# Embedding Model Endpoints
+# =============================================================================
+
+@app.get("/embedding/status")
+def embedding_status() -> Dict[str, Any]:
+    """Return the current embedding provider status."""
+    native = NativeEmbedder()
+    deps_ok = native.is_available()
+
+    # Check if model files are already cached in HF cache
+    model_cached = False
+    model_path = None
+    if deps_ok:
+        try:
+            from huggingface_hub import try_to_load_from_cache  # type: ignore[import-untyped]
+            cached = try_to_load_from_cache(
+                NativeEmbedder.HF_REPO_ID, NativeEmbedder.ONNX_FILE
+            )
+            if cached is not None and not isinstance(cached, str):
+                model_cached = False
+            elif isinstance(cached, str):
+                model_cached = True
+                model_path = cached
+        except Exception:
+            pass
+
+    source = _config.get("embedding_source", "native")
+    return ok({
+        "source": source,
+        "native_available": deps_ok,
+        "model_cached": model_cached,
+        "model_path": model_path,
+        "hf_repo_id": NativeEmbedder.HF_REPO_ID,
+        "onnx_file": NativeEmbedder.ONNX_FILE,
+        "dim": NativeEmbedder.DIM,
+    })
+
+
+@app.post("/embedding/download")
+def embedding_download() -> Dict[str, Any]:
+    """Download the native embedding model from HuggingFace Hub.
+
+    The model is cached in the standard HF cache directory (~/.cache/huggingface/).
+    This is a blocking call — the download happens synchronously.
+    """
+    native = NativeEmbedder()
+    if not native.is_available():
+        raise ApiException(
+            status_code=400,
+            code="NATIVE_DEPS_MISSING",
+            message="Native embedding dependencies not installed",
+            hint="pip install onnxruntime tokenizers huggingface-hub",
+        )
+
+    try:
+        model_path = native.download_model()
+    except Exception as e:
+        raise ApiException(
+            status_code=500,
+            code="DOWNLOAD_FAILED",
+            message=f"Model download failed: {e}",
+            hint="Check your internet connection and try again.",
+        )
+
+    return ok({
+        "status": "downloaded",
+        "model_path": model_path,
+        "hf_repo_id": NativeEmbedder.HF_REPO_ID,
+    })
+
+
+# =============================================================================
+# CLaRa Compression Endpoints
+# =============================================================================
+
+@app.get("/clara/status")
+def clara_status() -> Dict[str, Any]:
+    """Return CLaRa sidecar server status and model info."""
+    clara_url = str(_config.get("clara_url", ClaraCompressor.DEFAULT_URL))
+    compressor = ClaraCompressor(base_url=clara_url)
+    info = compressor.status()
+    return ok(info)
+
+
+@app.get("/clara/health")
+def clara_health() -> Dict[str, Any]:
+    """Quick health check for the CLaRa sidecar."""
+    clara_url = str(_config.get("clara_url", ClaraCompressor.DEFAULT_URL))
+    compressor = ClaraCompressor(base_url=clara_url)
+    available = compressor.is_available()
+    return ok({"url": clara_url, "available": available})
+
+
+# =============================================================================
+# Project Endpoints
+# =============================================================================
+
 @app.get("/projects")
 def list_projects() -> Dict[str, Any]:
     reg = _get_registry()
@@ -938,7 +1082,52 @@ def update_project(project_id: str, req: UpdateProjectRequest) -> Dict[str, Any]
             hint="Add the project first or select an existing project.",
         )
 
+    if req.path_weights is not None:
+        updated = _persist_path_weights(updated, req.path_weights)
+
     return ok({"project": _project_to_dict(updated)})
+
+
+@app.put("/projects/{project_id}/path_weights")
+def update_path_weights(project_id: str, req: PathWeightsRequest) -> Dict[str, Any]:
+    proj = _require_project(project_id)
+    updated = _persist_path_weights(proj, req.path_weights)
+    return ok({"project": _project_to_dict(updated), "path_weights": updated.config.get("path_weights", {})})
+
+
+@app.get("/projects/{project_id}/path_weights")
+def get_path_weights(project_id: str) -> Dict[str, Any]:
+    proj = _require_project(project_id)
+    pw = proj.config.get("path_weights", {})
+    return ok({"path_weights": pw})
+
+
+def _persist_path_weights(proj: Project, raw_weights: Dict[str, float]) -> Project:
+    """Normalize and persist path_weights to project config AND repo_policy.json."""
+    normalized = _normalize_path_weights(raw_weights)
+
+    # Update project config in SQLite
+    reg = _get_registry()
+    new_config = dict(proj.config)
+    new_config["path_weights"] = normalized
+    updated = reg.update_project(proj.id, config=new_config)
+
+    # Also persist to repo_policy.json on disk so next build picks it up
+    idx_dir = project_index_dir(proj)
+    pp = policy_path_for_index(idx_dir)
+    policy = load_repo_policy(pp)
+    if policy is not None:
+        policy["path_weights"] = normalized
+        write_repo_policy(pp, policy)
+
+    # Hot-update the in-memory manifest so searches use new weights immediately
+    idx = _project_indexes.get(proj.id)
+    if idx is not None and idx._manifest:
+        cfg = idx._manifest.get("config")
+        if isinstance(cfg, dict):
+            cfg["path_weights"] = normalized
+
+    return updated
 
 
 @app.delete("/projects/{project_id}")
@@ -1210,6 +1399,75 @@ def get_project_roots(project_id: str) -> Dict[str, Any]:
     return ok({"roots": roots})
 
 
+@app.get("/projects/{project_id}/files")
+def list_project_files(
+    project_id: str,
+    path: str = "",
+    depth: int = 3,
+) -> Dict[str, Any]:
+    """List files and directories under a project path.
+
+    Parameters
+    ----------
+    path : str
+        Relative path within the project root (empty = project root).
+    depth : int
+        Maximum recursion depth (default 3, max 10).
+    """
+    proj = _require_project(project_id)
+    project_root = Path(proj.path).expanduser().resolve()
+
+    if not project_root.exists() or not project_root.is_dir():
+        raise ApiException(status_code=400, code="PROJECT_PATH_MISSING", message="Project path not found")
+
+    # Resolve target directory safely
+    target = (project_root / path).resolve()
+    # Security: ensure target is within project root
+    try:
+        target.relative_to(project_root)
+    except ValueError:
+        raise ApiException(status_code=400, code="PATH_OUTSIDE_PROJECT", message="Path is outside project root")
+
+    if not target.exists() or not target.is_dir():
+        raise ApiException(status_code=400, code="PATH_NOT_FOUND", message=f"Directory not found: {path}")
+
+    ignore = {".git", ".venv", "venv", "node_modules", "__pycache__", ".next", "dist",
+              "build", ".codrag", ".idea", ".vscode", ".mypy_cache", ".pytest_cache",
+              ".tox", ".eggs", "*.egg-info", ".DS_Store"}
+    depth = min(max(depth, 1), 10)
+
+    def _scan(directory: Path, current_depth: int) -> List[Dict[str, Any]]:
+        entries: List[Dict[str, Any]] = []
+        try:
+            items = sorted(directory.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))
+        except PermissionError:
+            return entries
+
+        for item in items:
+            name = item.name
+            if name in ignore or (name.startswith(".") and name != ".env"):
+                continue
+            if any(name.endswith(suf) for suf in (".egg-info", ".pyc", ".pyo")):
+                continue
+
+            if item.is_dir():
+                children = _scan(item, current_depth + 1) if current_depth < depth else []
+                entries.append({
+                    "name": name,
+                    "type": "folder",
+                    "children": children,
+                })
+            elif item.is_file():
+                entries.append({
+                    "name": name,
+                    "type": "file",
+                })
+        return entries
+
+    tree = _scan(target, 1)
+    return ok({"path": path, "tree": tree})
+
+
 @app.post("/projects/{project_id}/build")
 def build_project(project_id: str, full: bool = False) -> Dict[str, Any]:
     proj = _require_project(project_id)
@@ -1272,6 +1530,48 @@ def search_project(project_id: str, req: SearchRequest) -> Dict[str, Any]:
     return ok({"results": out})
 
 
+def _get_compressor(compression: str) -> "ContextCompressor":
+    """Get the appropriate compressor based on the compression parameter."""
+    if compression == "clara":
+        clara_url = str(_config.get("clara_url", ClaraCompressor.DEFAULT_URL))
+        return ClaraCompressor(base_url=clara_url)
+    return NoopCompressor()
+
+
+def _apply_compression(
+    context_str: str,
+    req: ContextRequest,
+) -> Dict[str, Any]:
+    """Apply compression to context string and return compression metadata."""
+    if req.compression == "none":
+        return {"context": context_str, "compression": None}
+
+    compressor = _get_compressor(req.compression)
+    budget = req.compression_target_chars or req.max_chars
+    result = compressor.compress(
+        context_str,
+        query=req.query,
+        budget_chars=budget,
+        level=req.compression_level,
+        timeout_s=req.compression_timeout_s,
+    )
+
+    compression_meta = {
+        "enabled": True,
+        "mode": req.compression,
+        "level": req.compression_level,
+        "input_chars": result.input_chars,
+        "output_chars": result.output_chars,
+        "input_tokens": result.input_tokens,
+        "output_tokens": result.output_tokens,
+        "compression_ratio": result.compression_ratio,
+        "timing_ms": round(result.timing_ms, 1),
+        "error": result.error,
+    }
+
+    return {"context": result.compressed, "compression": compression_meta}
+
+
 @app.post("/projects/{project_id}/context")
 def context_project(project_id: str, req: ContextRequest) -> Dict[str, Any]:
     proj = _require_project(project_id)
@@ -1287,6 +1587,21 @@ def context_project(project_id: str, req: ContextRequest) -> Dict[str, Any]:
             hint="Run a build first.",
         )
 
+    # Resolve trace index for trace expansion
+    trace_idx = None
+    if req.trace_expand:
+        cfg = proj.config or {}
+        trace_cfg = cfg.get("trace") if isinstance(cfg, dict) else None
+        if bool((trace_cfg or {}).get("enabled", False)):
+            try:
+                ti = _get_project_trace_index(proj)
+                if ti.exists():
+                    if not ti.is_loaded():
+                        ti.load()
+                    trace_idx = ti
+            except Exception:
+                pass  # Graceful: fall back to non-expanded context
+
     if not req.structured:
         ctx = idx.get_context(
             req.query,
@@ -1296,7 +1611,36 @@ def context_project(project_id: str, req: ContextRequest) -> Dict[str, Any]:
             include_scores=req.include_scores,
             min_score=req.min_score,
         )
-        return ok({"context": ctx})
+
+        comp = _apply_compression(ctx, req)
+        resp: Dict[str, Any] = {"context": comp["context"]}
+        if comp["compression"] is not None:
+            resp["compression"] = comp["compression"]
+        return ok(resp)
+
+    # Structured context: use trace expansion if available
+    if trace_idx is not None:
+        result = idx.get_context_with_trace_expansion(
+            req.query,
+            trace_index=trace_idx,
+            k=req.k,
+            max_chars=req.max_chars,
+            min_score=req.min_score,
+            max_additional_chars=req.trace_max_chars,
+        )
+        context_str = str(result.get("context") or "")
+        comp = _apply_compression(context_str, req)
+        resp_data: Dict[str, Any] = {
+            "context": comp["context"],
+            "chunks": result.get("chunks", []),
+            "total_chars": len(comp["context"]),
+            "estimated_tokens": len(comp["context"]) // 4,
+            "trace_expanded": result.get("trace_expanded", False),
+            "trace_nodes_added": result.get("trace_nodes_added", 0),
+        }
+        if comp["compression"] is not None:
+            resp_data["compression"] = comp["compression"]
+        return ok(resp_data)
 
     results = idx.search(req.query, k=req.k, min_score=req.min_score)
     parts: List[str] = []
@@ -1353,14 +1697,17 @@ def context_project(project_id: str, req: ContextRequest) -> Dict[str, Any]:
             break
 
     context_str = "".join(parts)
-    return ok(
-        {
-            "context": context_str,
-            "chunks": chunks,
-            "total_chars": total,
-            "estimated_tokens": total // 4,
-        }
-    )
+
+    comp = _apply_compression(context_str, req)
+    resp_data: Dict[str, Any] = {
+        "context": comp["context"],
+        "chunks": chunks,
+        "total_chars": len(comp["context"]),
+        "estimated_tokens": len(comp["context"]) // 4,
+    }
+    if comp["compression"] is not None:
+        resp_data["compression"] = comp["compression"]
+    return ok(resp_data)
 
 
 @app.get("/projects/{project_id}/trace/status")
@@ -1403,6 +1750,86 @@ def build_trace_project(project_id: str) -> Dict[str, Any]:
         raise ApiException(status_code=409, code="TRACE_BUILD_ALREADY_RUNNING", message="Trace build already running")
     
     return ok({"started": True, "building": True})
+
+
+@app.get("/projects/{project_id}/trace/coverage")
+def trace_coverage_project(project_id: str) -> Dict[str, Any]:
+    """Get trace coverage: traced, untraced, stale, and ignored files."""
+    proj = _require_project(project_id)
+
+    cfg = proj.config or {}
+    trace_cfg = cfg.get("trace") if isinstance(cfg, dict) else None
+    if not bool((trace_cfg or {}).get("enabled", False)):
+        raise ApiException(
+            status_code=409,
+            code="TRACE_DISABLED",
+            message="Trace is disabled for this project",
+            hint="Enable trace in project settings.",
+        )
+
+    include_raw = cfg.get("include_globs") if isinstance(cfg, dict) else None
+    exclude_raw = cfg.get("exclude_globs") if isinstance(cfg, dict) else None
+    include_globs = list(include_raw) if isinstance(include_raw, list) else None
+    exclude_globs = list(exclude_raw) if isinstance(exclude_raw, list) else None
+
+    # Merge trace-specific ignore patterns from project config
+    trace_ignore = (trace_cfg or {}).get("ignore_patterns", [])
+    if isinstance(trace_ignore, list) and trace_ignore:
+        if exclude_globs is None:
+            exclude_globs = [
+                "**/node_modules/**", "**/.git/**", "**/venv/**",
+                "**/__pycache__/**", "**/dist/**", "**/build/**",
+            ]
+        exclude_globs = list(exclude_globs) + [str(p) for p in trace_ignore]
+
+    max_file_bytes = int((cfg.get("max_file_bytes") or 500_000) if isinstance(cfg, dict) else 500_000)
+    idx_dir = project_index_dir(proj)
+
+    coverage = compute_trace_coverage(
+        repo_root=Path(proj.path),
+        index_dir=idx_dir,
+        include_globs=include_globs,
+        exclude_globs=exclude_globs,
+        max_file_bytes=max_file_bytes,
+    )
+    coverage["building"] = _is_project_trace_building(proj.id)
+    return ok(coverage)
+
+
+class TraceIgnoreRequest(BaseModel):
+    action: str  # "add" | "remove"
+    patterns: List[str]
+
+
+@app.post("/projects/{project_id}/trace/ignore")
+def update_trace_ignore(project_id: str, req: TraceIgnoreRequest) -> Dict[str, Any]:
+    """Add or remove trace-specific ignore patterns."""
+    proj = _require_project(project_id)
+
+    if req.action not in ("add", "remove"):
+        raise ApiException(status_code=400, code="VALIDATION_ERROR", message="action must be 'add' or 'remove'")
+    if not req.patterns:
+        raise ApiException(status_code=400, code="VALIDATION_ERROR", message="patterns list is required")
+
+    cfg = dict(proj.config or {})
+    trace_cfg = dict(cfg.get("trace") or {})
+    current_patterns: List[str] = list(trace_cfg.get("ignore_patterns") or [])
+
+    if req.action == "add":
+        for p in req.patterns:
+            p = str(p).strip()
+            if p and p not in current_patterns:
+                current_patterns.append(p)
+    else:
+        remove_set = set(str(p).strip() for p in req.patterns)
+        current_patterns = [p for p in current_patterns if p not in remove_set]
+
+    trace_cfg["ignore_patterns"] = current_patterns
+    cfg["trace"] = trace_cfg
+    proj.config = cfg
+    _registry.update(proj)
+
+    return ok({"ignore_patterns": current_patterns})
 
 
 @app.get("/projects/{project_id}/trace/search")
@@ -1611,10 +2038,14 @@ def get_llm_status() -> Dict[str, Any]:
         connected = False
         models = []
 
+    clara_url = str(_config.get("clara_url", ClaraCompressor.DEFAULT_URL))
+    clara_compressor = ClaraCompressor(base_url=clara_url)
+    clara_connected = clara_compressor.is_available()
+
     return ok(
         {
             "ollama": {"url": ollama_url, "connected": connected, "models": models},
-            "clara": {"url": "http://localhost:8765", "enabled": False, "connected": False},
+            "clara": {"url": clara_url, "connected": clara_connected},
         }
     )
 

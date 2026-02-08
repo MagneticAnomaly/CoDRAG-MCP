@@ -70,6 +70,42 @@ export class MockApiClient implements ApiClient {
   async getLLMStatus(): Promise<any> {
     throw new Error(`MockApiClient: method 'getLLMStatus' is not implemented`);
   }
+
+  async getProjectFiles(): Promise<any> {
+    throw new Error(`MockApiClient: method 'getProjectFiles' is not implemented`);
+  }
+
+  async getPathWeights(): Promise<any> {
+    throw new Error(`MockApiClient: method 'getPathWeights' is not implemented`);
+  }
+
+  async updatePathWeights(): Promise<any> {
+    throw new Error(`MockApiClient: method 'updatePathWeights' is not implemented`);
+  }
+
+  async searchTrace(): Promise<any> {
+    throw new Error(`MockApiClient: method 'searchTrace' is not implemented`);
+  }
+
+  async getTraceNode(): Promise<any> {
+    throw new Error(`MockApiClient: method 'getTraceNode' is not implemented`);
+  }
+
+  async getTraceNeighbors(): Promise<any> {
+    throw new Error(`MockApiClient: method 'getTraceNeighbors' is not implemented`);
+  }
+
+  async buildTrace(): Promise<any> {
+    throw new Error(`MockApiClient: method 'buildTrace' is not implemented`);
+  }
+
+  async getTraceCoverage(): Promise<any> {
+    throw new Error(`MockApiClient: method 'getTraceCoverage' is not implemented`);
+  }
+
+  async updateTraceIgnore(): Promise<any> {
+    throw new Error(`MockApiClient: method 'updateTraceIgnore' is not implemented`);
+  }
 }
 
 export const createMockApiClient = (): ApiClient => new MockApiClient();

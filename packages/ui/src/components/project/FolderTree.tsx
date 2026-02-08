@@ -76,6 +76,24 @@ function getFolderSelectionState(
   return 'partial';
 }
 
+/** Resolve effective weight for a path by walking up the hierarchy */
+function getEffectiveWeight(
+  path: string,
+  pathWeights: Record<string, number>
+): { weight: number; inherited: boolean; source: string | null } {
+  if (path in pathWeights) {
+    return { weight: pathWeights[path], inherited: false, source: path };
+  }
+  const parts = path.split('/');
+  for (let i = parts.length - 1; i >= 1; i--) {
+    const parentPath = parts.slice(0, i).join('/');
+    if (parentPath in pathWeights) {
+      return { weight: pathWeights[parentPath], inherited: true, source: parentPath };
+    }
+  }
+  return { weight: 1.0, inherited: false, source: null };
+}
+
 export interface FolderTreeProps {
   data: TreeNode[];
   compact?: boolean;
@@ -85,6 +103,10 @@ export interface FolderTreeProps {
   onToggleInclude?: (paths: string[], action: 'add' | 'remove') => void;
   /** Called when user clicks a node (for navigation/preview) */
   onNodeClick?: (node: TreeNode, path: string) => void;
+  /** Per-path weight overrides (0.0–2.0, default 1.0). Folder weights propagate to children. */
+  pathWeights?: Record<string, number>;
+  /** Called when user changes weight. null removes the override (inherits parent weight). */
+  onWeightChange?: (path: string, weight: number | null) => void;
   className?: string;
 }
 
@@ -95,10 +117,113 @@ interface TreeItemProps {
   includedPaths?: Set<string>;
   onToggleInclude?: (paths: string[], action: 'add' | 'remove') => void;
   onNodeClick?: (node: TreeNode, path: string) => void;
+  pathWeights?: Record<string, number>;
+  onWeightChange?: (path: string, weight: number | null) => void;
 }
 
-function TreeItem({ node, depth = 0, path = '', includedPaths, onToggleInclude, onNodeClick }: TreeItemProps) {
-  const [expanded, setExpanded] = useState(depth < 2);
+function WeightEditor({
+  effectiveWeight,
+  isInherited,
+  inheritedFrom,
+  onWeightChange,
+  currentPath,
+}: {
+  effectiveWeight: number;
+  isInherited: boolean;
+  inheritedFrom: string | null;
+  onWeightChange?: (path: string, weight: number | null) => void;
+  currentPath: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [inputValue, setInputValue] = useState(effectiveWeight.toFixed(1));
+
+  if (!onWeightChange) return null;
+
+  const handleSave = () => {
+    setEditing(false);
+    const parsed = parseFloat(inputValue);
+    if (isNaN(parsed)) return;
+    const clamped = Math.max(0, Math.min(2, Math.round(parsed * 10) / 10));
+    onWeightChange(currentPath, clamped);
+  };
+
+  const handleReset = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditing(false);
+    onWeightChange(currentPath, null);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') handleSave();
+    if (e.key === 'Escape') {
+      setEditing(false);
+      setInputValue(effectiveWeight.toFixed(1));
+    }
+    e.stopPropagation();
+  };
+
+  if (editing) {
+    return (
+      <span className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+        <input
+          type="number"
+          min="0"
+          max="2"
+          step="0.1"
+          value={inputValue}
+          onChange={e => setInputValue(e.target.value)}
+          onBlur={handleSave}
+          onKeyDown={handleKeyDown}
+          onFocus={e => e.target.select()}
+          autoFocus
+          className="w-14 text-xs text-center bg-surface border border-border rounded px-1 py-0.5 font-mono
+                     focus:outline-none focus:ring-1 focus:ring-primary"
+        />
+        {!isInherited && (
+          <button
+            onMouseDown={e => { e.preventDefault(); handleReset(e); }}
+            className="text-[10px] text-text-subtle hover:text-primary px-0.5 leading-none"
+            title="Reset to inherited weight"
+          >
+            reset
+          </button>
+        )}
+      </span>
+    );
+  }
+
+  const isDefault = effectiveWeight === 1.0 && !isInherited;
+
+  return (
+    <button
+      onClick={e => {
+        e.stopPropagation();
+        setInputValue(effectiveWeight.toFixed(1));
+        setEditing(true);
+      }}
+      title={
+        isInherited && inheritedFrom
+          ? `×${effectiveWeight.toFixed(1)} inherited from ${inheritedFrom}`
+          : effectiveWeight === 1.0
+            ? 'Click to set context weight'
+            : `×${effectiveWeight.toFixed(1)} (click to edit)`
+      }
+      className={cn(
+        'text-xs font-mono px-1.5 py-0.5 rounded transition-all whitespace-nowrap',
+        isDefault && 'opacity-0 group-hover:opacity-50 text-text-subtle hover:!opacity-100',
+        !isDefault && effectiveWeight < 1 && 'bg-warning/10 text-warning hover:bg-warning/20',
+        !isDefault && effectiveWeight > 1 && 'bg-success/10 text-success hover:bg-success/20',
+        !isDefault && effectiveWeight === 1 && 'text-text-subtle',
+        isInherited && 'italic',
+      )}
+    >
+      ×{effectiveWeight.toFixed(1)}
+    </button>
+  );
+}
+
+function TreeItem({ node, depth = 0, path = '', includedPaths, onToggleInclude, onNodeClick, pathWeights, onWeightChange }: TreeItemProps) {
+  const [expanded, setExpanded] = useState(false);
   const hasChildren = node.children && node.children.length > 0;
   const isFolder = node.type === 'folder';
   const currentPath = path ? `${path}/${node.name}` : node.name;
@@ -112,6 +237,9 @@ function TreeItem({ node, depth = 0, path = '', includedPaths, onToggleInclude, 
     : 'none';
   const isPartiallySelected = isFolder && folderSelectionState === 'partial';
   const isFolderFullySelected = isFolder && (isIncluded || folderSelectionState === 'all');
+
+  const { weight: effectiveWeight, inherited: isWeightInherited, source: weightSource } =
+    getEffectiveWeight(currentPath, pathWeights ?? {});
 
   const handleRowClick = () => {
     // Fire node click callback for navigation/preview
@@ -149,14 +277,16 @@ function TreeItem({ node, depth = 0, path = '', includedPaths, onToggleInclude, 
     <div>
       <div
         className={cn(
-          'group flex items-center gap-1 rounded-md px-2 py-1.5 transition-colors',
+          'group flex items-center gap-1 rounded-md px-2 py-1 my-px transition-colors',
           depth > 0 && 'ml-4',
           // Hover state only for selectable items
           isSelectable && 'hover:bg-surface-raised cursor-pointer',
           // Ignored items are dimmed and not interactive
           isIgnored && 'opacity-50 cursor-default',
           // Selected/included items get a subtle background
-          isIncluded && !isIgnored && 'bg-primary/5'
+          isIncluded && !isIgnored && 'bg-primary/5',
+          effectiveWeight < 1 && effectiveWeight > 0 && !isIgnored && isSelectable && 'opacity-75',
+          effectiveWeight === 0 && !isIgnored && isSelectable && 'opacity-40'
         )}
         onClick={handleRowClick}
         title={isIgnored 
@@ -219,8 +349,18 @@ function TreeItem({ node, depth = 0, path = '', includedPaths, onToggleInclude, 
           {node.name}
         </span>
 
-        {/* Right side: status badge and chunk count - always at far right */}
+        {/* Right side: weight, status badge and chunk count - always at far right */}
         <span className="ml-auto flex items-center gap-2 shrink-0">
+          {/* Weight editor */}
+          {isSelectable && (
+            <WeightEditor
+              effectiveWeight={effectiveWeight}
+              isInherited={isWeightInherited}
+              inheritedFrom={weightSource}
+              onWeightChange={onWeightChange}
+              currentPath={currentPath}
+            />
+          )}
           {/* Chunk count for indexed items */}
           {node.chunks !== undefined && node.status === 'indexed' && (
             <span className="text-xs text-text-subtle">
@@ -254,6 +394,8 @@ function TreeItem({ node, depth = 0, path = '', includedPaths, onToggleInclude, 
               includedPaths={includedPaths}
               onToggleInclude={onToggleInclude}
               onNodeClick={onNodeClick}
+              pathWeights={pathWeights}
+              onWeightChange={onWeightChange}
             />
           ))}
         </div>
@@ -268,6 +410,8 @@ export function FolderTree({
   includedPaths,
   onToggleInclude,
   onNodeClick,
+  pathWeights,
+  onWeightChange,
   className,
 }: FolderTreeProps) {
   return (
@@ -279,6 +423,8 @@ export function FolderTree({
           includedPaths={includedPaths}
           onToggleInclude={onToggleInclude}
           onNodeClick={onNodeClick}
+          pathWeights={pathWeights}
+          onWeightChange={onWeightChange}
         />
       ))}
     </div>

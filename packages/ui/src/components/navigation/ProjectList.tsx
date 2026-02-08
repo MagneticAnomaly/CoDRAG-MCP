@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { ProjectSummary } from '../../types';
 import { StatusBadge } from '../status/StatusBadge';
 import { cn } from '../../lib/utils';
@@ -9,6 +10,7 @@ export interface ProjectListProps {
   selectedProjectId?: string;
   onProjectSelect: (projectId: string) => void;
   onAddProject: () => void;
+  extraActions?: ReactNode;
   className?: string;
 }
 
@@ -57,6 +59,7 @@ export function ProjectList({
   selectedProjectId,
   onProjectSelect,
   onAddProject,
+  extraActions,
   className,
 }: ProjectListProps) {
   return (
@@ -80,15 +83,16 @@ export function ProjectList({
           ))
         )}
       </div>
-      <div className="p-4 border-t border-border">
+      <div className="p-4 border-t border-border flex gap-2">
         <Button
           onClick={onAddProject}
           variant="outline"
-          className="w-full bg-surface hover:bg-surface-raised"
+          className="flex-1 bg-surface hover:bg-surface-raised"
           icon={FolderPlus}
         >
           Add Project
         </Button>
+        {extraActions}
       </div>
     </div>
   );

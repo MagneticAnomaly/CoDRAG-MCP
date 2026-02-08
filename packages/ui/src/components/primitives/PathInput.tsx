@@ -98,6 +98,9 @@ export function PathInput({
     }
 
     // Browser File System Access API
+    // NOTE: This only returns the folder/file NAME, not the full path.
+    // In 'auto' mode this branch is unreachable (button hidden).
+    // Only reached when pickerMode is explicitly 'browser'.
     try {
       if ('showDirectoryPicker' in window && directory) {
         const handle = await (window as any).showDirectoryPicker({ mode: 'read' });

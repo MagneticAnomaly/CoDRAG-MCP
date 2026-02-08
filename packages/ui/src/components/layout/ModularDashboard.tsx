@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { DashboardGrid } from './DashboardGrid';
@@ -6,7 +6,7 @@ import { PanelChrome } from './PanelChrome';
 import { PanelPicker } from './PanelPicker';
 import { useLayoutPersistence } from './useLayoutPersistence';
 import type { PanelDefinition } from '../../types/layout';
-import { adjustLayoutForColChange, BASE_COLS, DEFAULT_LAYOUT } from '../../types/layout';
+import { DEFAULT_LAYOUT } from '../../types/layout';
 import { cn } from '../../lib/utils';
 import { AutoHeightPanel } from './AutoHeightPanel';
 import { Button } from '../primitives/Button';
@@ -18,6 +18,11 @@ export interface PanelContentMap {
 export interface DashboardLayoutApi {
   addPanel: (panelId: string, options?: { height?: number; x?: number; w?: number }) => void;
   removePanel: (panelId: string) => void;
+  togglePanelVisibility: (panelId: string) => void;
+  resetLayout: () => void;
+  reflowLayout: () => void;
+  copyLayout: () => void;
+  pasteLayout: () => void;
 }
 
 export interface ModularDashboardProps {
@@ -35,6 +40,10 @@ export interface ModularDashboardProps {
   onPanelClose?: (panelId: string) => void;
   /** Called once with layout API methods for dynamic panel management. */
   onLayoutReady?: (api: DashboardLayoutApi) => void;
+  /** Hide the built-in PanelPicker (when rendering it externally). */
+  hidePanelPicker?: boolean;
+  /** Called whenever dashboard layout changes (for external PanelPicker). */
+  onLayoutChange?: (layout: import('../../types/layout').DashboardLayout) => void;
 }
 
 /**
@@ -56,6 +65,8 @@ export function ModularDashboard({
   storageKey,
   onPanelClose,
   onLayoutReady,
+  hidePanelPicker,
+  onLayoutChange,
 }: ModularDashboardProps) {
   const {
     layout,
@@ -68,19 +79,9 @@ export function ModularDashboard({
     removePanel,
   } = useLayoutPersistence({ storageKey });
 
-  // Expose layout API to parent once
-  useEffect(() => {
-    onLayoutReady?.({ addPanel, removePanel });
-  }, [onLayoutReady, addPanel, removePanel]);
-
-  // Track current column count for reset centering
-  const currentColsRef = useRef<number>(BASE_COLS);
-
-  // Centered reset — shift DEFAULT_LAYOUT into current dynamic cols
+  // Reset to default layout — DashboardGrid handles centering at display time
   const handleResetLayout = useCallback(() => {
-    const cols = currentColsRef.current;
-    const centered = adjustLayoutForColChange(DEFAULT_LAYOUT, BASE_COLS, cols);
-    updateLayout(centered);
+    updateLayout(DEFAULT_LAYOUT);
   }, [updateLayout]);
 
   // Copy current layout JSON to clipboard
@@ -111,14 +112,23 @@ export function ModularDashboard({
     );
   }, [updateLayout]);
 
-  // Handle dynamic column count changes — shift layout to keep panels centered
-  const handleColsChange = useCallback(
-    (prevCols: number, newCols: number) => {
-      currentColsRef.current = newCols;
-      updateLayout(adjustLayoutForColChange(layout, prevCols, newCols));
-    },
-    [layout, updateLayout],
-  );
+  // Expose layout API to parent once
+  useEffect(() => {
+    onLayoutReady?.({
+      addPanel,
+      removePanel,
+      togglePanelVisibility,
+      resetLayout: handleResetLayout,
+      reflowLayout,
+      copyLayout: handleCopyLayout,
+      pasteLayout: handlePasteLayout,
+    });
+  }, [onLayoutReady, addPanel, removePanel, togglePanelVisibility, handleResetLayout, reflowLayout, handleCopyLayout, handlePasteLayout]);
+
+  // Notify parent of layout changes
+  useEffect(() => {
+    onLayoutChange?.(layout);
+  }, [layout, onLayoutChange]);
 
   const [pendingHeights, setPendingHeights] = useState<Record<string, number>>({});
   const [detailsPanelId, setDetailsPanelId] = useState<string | null>(null);
@@ -213,15 +223,17 @@ export function ModularDashboard({
         </div>
         <div className="flex items-center gap-4">
           {headerRight}
-          <PanelPicker
-            layout={layout}
-            panelDefinitions={panelDefinitions}
-            onTogglePanel={togglePanelVisibility}
-            onResetLayout={handleResetLayout}
-            onRefitLayout={reflowLayout}
-            onCopyLayout={handleCopyLayout}
-            onPasteLayout={handlePasteLayout}
-          />
+          {!hidePanelPicker && (
+            <PanelPicker
+              layout={layout}
+              panelDefinitions={panelDefinitions}
+              onTogglePanel={togglePanelVisibility}
+              onResetLayout={handleResetLayout}
+              onRefitLayout={reflowLayout}
+              onCopyLayout={handleCopyLayout}
+              onPasteLayout={handlePasteLayout}
+            />
+          )}
         </div>
       </div>
 
@@ -230,7 +242,6 @@ export function ModularDashboard({
         layout={layout}
         panelDefinitions={panelDefinitions}
         onLayoutChange={updateLayout}
-        onColsChange={handleColsChange}
         rowHeight={rowHeight}
         margin={margin}
         maxColWidth={maxColWidth}
@@ -323,9 +334,9 @@ export function ModularDashboard({
                 <X className="w-5 h-5" />
               </Button>
             </div>
-            <div className="flex-1 overflow-auto p-6">
+            <div className="flex-1 min-h-0 overflow-hidden">
               {detailsContent ?? (
-                <div className="text-sm text-text-muted">No details available</div>
+                <div className="p-6 text-sm text-text-muted">No details available</div>
               )}
             </div>
           </div>

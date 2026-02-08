@@ -13,7 +13,6 @@ export interface DashboardGridProps {
   layout: DashboardLayout;
   panelDefinitions?: PanelDefinition[];
   onLayoutChange: (layout: DashboardLayout) => void;
-  onColsChange?: (prevCols: number, newCols: number) => void;
   children: ReactNode;
   className?: string;
   rowHeight?: number;
@@ -25,7 +24,6 @@ export function DashboardGrid({
   layout,
   panelDefinitions,
   onLayoutChange,
-  onColsChange,
   children,
   className,
   rowHeight = 20,
@@ -34,7 +32,6 @@ export function DashboardGrid({
 }: DashboardGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(1200);
-  const prevColsRef = useRef<number>(BASE_COLS);
 
   // Measure container width
   useEffect(() => {
@@ -56,17 +53,17 @@ export function DashboardGrid({
     [width, margin, maxColWidth],
   );
 
-  // Detect column count changes and notify parent
-  useEffect(() => {
-    const prev = prevColsRef.current;
-    if (prev !== cols) {
-      prevColsRef.current = cols;
-      onColsChange?.(prev, cols);
-    }
-  }, [cols, onColsChange]);
+  // Centering offset: extra cols split evenly left/right
+  const colOffset = Math.floor((cols - BASE_COLS) / 2);
 
-  // Convert our layout format to react-grid-layout format
-  const gridLayout = toGridLayout(layout, panelDefinitions);
+  // Convert our layout format to react-grid-layout format, adding centering offset
+  const gridLayout = useMemo(
+    () => toGridLayout(layout, panelDefinitions).map((item) => ({
+      ...item,
+      x: Math.max(0, Math.min(item.x + colOffset, cols - item.w)),
+    })),
+    [layout, panelDefinitions, colOffset, cols],
+  );
 
   const handleLayoutCommit = useCallback(
     (newLayout: Layout[]) => {
@@ -76,7 +73,7 @@ export function DashboardGrid({
 
         return {
           i: item.i,
-          x: item.x,
+          x: Math.max(0, item.x - colOffset),
           y: item.y,
           w: item.w,
           h: isResizableItem === false && existing && !existing.collapsed ? existing.height : item.h,
@@ -87,7 +84,7 @@ export function DashboardGrid({
       const updated = fromGridLayout(layout, items);
       onLayoutChange(updated);
     },
-    [layout, onLayoutChange]
+    [layout, onLayoutChange, colOffset]
   );
 
   return (

@@ -11,6 +11,10 @@ export interface FolderTreePanelProps {
   onToggleInclude?: (paths: string[], action: 'add' | 'remove') => void;
   /** Called when user clicks a node (for navigation/preview in detail view) */
   onNodeClick?: (node: TreeNode, path: string) => void;
+  /** Per-path weight overrides (0.0–2.0, default 1.0). Folder weights propagate to children. */
+  pathWeights?: Record<string, number>;
+  /** Called when user changes weight. null removes the override (inherits parent weight). */
+  onWeightChange?: (path: string, weight: number | null) => void;
   title?: string;
   className?: string;
   bare?: boolean;
@@ -21,6 +25,8 @@ export function FolderTreePanel({
   includedPaths,
   onToggleInclude,
   onNodeClick,
+  pathWeights,
+  onWeightChange,
   title = 'Index Scope',
   className,
   bare = false,
@@ -47,6 +53,8 @@ export function FolderTreePanel({
             includedPaths={includedPaths}
             onToggleInclude={onToggleInclude}
             onNodeClick={onNodeClick}
+            pathWeights={pathWeights}
+            onWeightChange={onWeightChange}
           />
         </div>
       </div>

@@ -1,6 +1,7 @@
 import { 
   Database, 
   Eye,
+  GitBranch,
   Hammer, 
   Search, 
   Settings2, 
@@ -8,7 +9,8 @@ import {
   FileText, 
   Pin,
   SlidersHorizontal,
-  List
+  List,
+  ShieldCheck,
 } from 'lucide-react';
 import type { PanelDefinition } from '../types/layout';
 
@@ -124,6 +126,26 @@ export const PANEL_REGISTRY: PanelDefinition[] = [
     defaultHeight: 4,
     category: 'status',
     closeable: true,
+  },
+  {
+    id: 'trace',
+    title: 'Symbol Browser',
+    icon: GitBranch,
+    minHeight: 6,
+    defaultHeight: 10,
+    category: 'search',
+    closeable: true,
+    resizable: true,
+  },
+  {
+    id: 'trace-coverage',
+    title: 'Trace Coverage',
+    icon: ShieldCheck,
+    minHeight: 6,
+    defaultHeight: 10,
+    category: 'status',
+    closeable: true,
+    resizable: true,
   },
 ];
 

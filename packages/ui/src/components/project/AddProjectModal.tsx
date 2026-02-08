@@ -114,7 +114,7 @@ export function AddProjectModal({
             value={path}
             onChange={setPath}
             placeholder="/path/to/your/project"
-            hint="Absolute path to the project root directory"
+            hint="Type or paste the absolute path to the project root directory"
             directory
           />
           

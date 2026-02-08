@@ -14,7 +14,13 @@ import type {
   SearchResponse,
   WatchActionResponse,
 } from './types';
-import type { LLMStatus, Project, ProjectStatus, TraceStatus, WatchStatus } from '../types';
+import type { LLMStatus, Project, ProjectStatus, TraceCoverage, TraceStatus, WatchStatus } from '../types';
+
+export interface FileTreeNode {
+  name: string;
+  type: 'file' | 'folder';
+  children?: FileTreeNode[];
+}
 
 export interface ApiClient {
   // Configuration
@@ -40,15 +46,26 @@ export interface ApiClient {
 
   // Trace
   getTraceStatus(projectId: string): Promise<TraceStatus>;
+  searchTrace(projectId: string, query: string, kinds?: string[], limit?: number): Promise<{ nodes: any[] }>;
+  getTraceNode(projectId: string, nodeId: string): Promise<{ node: any; in_degree: number; out_degree: number }>;
+  getTraceNeighbors(projectId: string, nodeId: string, direction?: string): Promise<{ nodes: any[]; edges: any[] }>;
+  buildTrace(projectId: string): Promise<{ started: boolean }>;
+  getTraceCoverage(projectId: string): Promise<TraceCoverage>;
+  updateTraceIgnore(projectId: string, action: 'add' | 'remove', patterns: string[]): Promise<{ ignore_patterns: string[] }>;
 
   // Roots & Files
   getProjectRoots(projectId: string): Promise<{ roots: string[] }>;
+  getProjectFiles(projectId: string, path?: string, depth?: number): Promise<{ path: string; tree: FileTreeNode[] }>;
   getProjectFileContent(projectId: string, path: string): Promise<{ content: string; path: string; size: number }>;
 
   // Watch
   startWatch(projectId: string): Promise<WatchActionResponse>;
   stopWatch(projectId: string): Promise<WatchActionResponse>;
   getWatchStatus(projectId: string): Promise<WatchStatus>;
+
+  // Path Weights
+  getPathWeights(projectId: string): Promise<{ path_weights: Record<string, number> }>;
+  updatePathWeights(projectId: string, pathWeights: Record<string, number>): Promise<{ path_weights: Record<string, number> }>;
 
   // LLM
   getLLMStatus(): Promise<LLMStatus>;
@@ -68,7 +85,7 @@ export class CodragApiClient implements ApiClient {
   constructor(config?: ApiClientConfig) {
     this.baseUrl = config?.baseUrl ?? 'http://127.0.0.1:8400';
     this.apiKey = config?.apiKey;
-    this.fetchImpl = config?.fetchImpl ?? fetch;
+    this.fetchImpl = config?.fetchImpl ?? fetch.bind(globalThis);
   }
 
   // ── Health ──────────────────────────────────────────────────
@@ -148,10 +165,57 @@ export class CodragApiClient implements ApiClient {
     return this.requestEnvelope<TraceStatus>(`/projects/${encodeURIComponent(projectId)}/trace/status`);
   }
 
+  async searchTrace(projectId: string, query: string, kinds?: string[], limit: number = 20): Promise<{ nodes: any[] }> {
+    return this.requestEnvelope<{ nodes: any[] }>(`/projects/${encodeURIComponent(projectId)}/trace/search`, {
+      method: 'POST',
+      body: { query, kinds, limit },
+    });
+  }
+
+  async getTraceNode(projectId: string, nodeId: string): Promise<{ node: any; in_degree: number; out_degree: number }> {
+    return this.requestEnvelope<{ node: any; in_degree: number; out_degree: number }>(
+      `/projects/${encodeURIComponent(projectId)}/trace/nodes/${encodeURIComponent(nodeId)}`
+    );
+  }
+
+  async getTraceNeighbors(projectId: string, nodeId: string, direction: string = 'both'): Promise<{ nodes: any[]; edges: any[] }> {
+    return this.requestEnvelope<{ nodes: any[]; edges: any[] }>(
+      `/projects/${encodeURIComponent(projectId)}/trace/neighbors/${encodeURIComponent(nodeId)}`,
+      { query: { direction } }
+    );
+  }
+
+  async buildTrace(projectId: string): Promise<{ started: boolean }> {
+    return this.requestEnvelope<{ started: boolean }>(`/projects/${encodeURIComponent(projectId)}/trace/build`, {
+      method: 'POST',
+    });
+  }
+
+  async getTraceCoverage(projectId: string): Promise<TraceCoverage> {
+    return this.requestEnvelope<TraceCoverage>(`/projects/${encodeURIComponent(projectId)}/trace/coverage`);
+  }
+
+  async updateTraceIgnore(projectId: string, action: 'add' | 'remove', patterns: string[]): Promise<{ ignore_patterns: string[] }> {
+    return this.requestEnvelope<{ ignore_patterns: string[] }>(`/projects/${encodeURIComponent(projectId)}/trace/ignore`, {
+      method: 'POST',
+      body: { action, patterns },
+    });
+  }
+
   // ── Roots ──────────────────────────────────────────────────
 
   async getProjectRoots(projectId: string): Promise<{ roots: string[] }> {
     return this.requestEnvelope<{ roots: string[] }>(`/projects/${encodeURIComponent(projectId)}/roots`);
+  }
+
+  async getProjectFiles(projectId: string, path: string = '', depth: number = 3): Promise<{ path: string; tree: FileTreeNode[] }> {
+    const params = new URLSearchParams();
+    if (path) params.set('path', path);
+    if (depth !== 3) params.set('depth', String(depth));
+    const qs = params.toString();
+    return this.requestEnvelope<{ path: string; tree: FileTreeNode[] }>(
+      `/projects/${encodeURIComponent(projectId)}/files${qs ? `?${qs}` : ''}`
+    );
   }
 
   async getProjectFileContent(projectId: string, path: string): Promise<{ content: string; path: string; size: number }> {
@@ -176,6 +240,21 @@ export class CodragApiClient implements ApiClient {
 
   async getWatchStatus(projectId: string): Promise<WatchStatus> {
     return this.requestEnvelope<WatchStatus>(`/projects/${encodeURIComponent(projectId)}/watch/status`);
+  }
+
+  // ── Path Weights ──────────────────────────────────────────
+
+  async getPathWeights(projectId: string): Promise<{ path_weights: Record<string, number> }> {
+    return this.requestEnvelope<{ path_weights: Record<string, number> }>(
+      `/projects/${encodeURIComponent(projectId)}/path_weights`
+    );
+  }
+
+  async updatePathWeights(projectId: string, pathWeights: Record<string, number>): Promise<{ path_weights: Record<string, number> }> {
+    return this.requestEnvelope<{ path_weights: Record<string, number> }>(
+      `/projects/${encodeURIComponent(projectId)}/path_weights`,
+      { method: 'PUT', body: { path_weights: pathWeights } }
+    );
   }
 
   // ── LLM ────────────────────────────────────────────────────

@@ -42,6 +42,7 @@ This file orchestrates work across phases by:
 - Phase11: `Phase11_Deployment/TODO.md`
 - Phase12: `Phase12_Marketing-Documentation-Website/TODO.md`
 - Phase13: `Phase13_Storybook/TODO.md`
+- Phase16: `Phase16_ContextIntelligence/README.md`
 
 ## Dependency anchors (planning)
 - **Canonical dependency doc:** `PHASE_DEPENDENCIES.md`
@@ -64,16 +65,21 @@ These sprints are intentionally cross-phase. Each sprint should end with:
 ### Sprint S-00: Research closure for MVP-critical phases (01–05)
 **Goal:** unblock implementation by closing the highest-leverage research gaps.
 
-- [ ] S-00.1 Close Phase01 research blockers (manifest schema, stable IDs, recovery model)
-  - See: `Phase01_Foundation/TODO.md` (P01-R*)
-- [ ] S-00.2 Close Phase02 research blockers (UI IA + API shapes + error states)
-  - See: `Phase02_Dashboard/TODO.md` (P02-R*)
-- [ ] S-00.3 Close Phase03 research blockers (watch strategy, debounce/throttle defaults)
-  - See: `Phase03_AutoRebuild/TODO.md` (P03-R*)
-- [ ] S-00.4 Close Phase04 research blockers (node/edge schema, analyzer MVP)
-  - See: `Phase04_TraceIndex/TODO.md` (P04-R*)
-- [ ] S-00.5 Close Phase05 research blockers (tool schemas, selection rules, budgets)
-  - See: `Phase05_MCP_Integration/TODO.md` (P05-R*)
+- [x] S-00.1 Close Phase01 research blockers (manifest schema, stable IDs, recovery model) ✅
+  - Manifest schema: defined with version, file_hashes, build stats, config
+  - Stable IDs: `ids.py` with sha256-based chunk/file/node IDs
+  - Recovery: atomic build swap + stale build cleanup
+- [p] S-00.2 Close Phase02 research blockers (UI IA + API shapes + error states)
+  - API shapes: done. UI IA: largely done (modular dashboard). Error states: done (ErrorState component + ApiException).
+  - Remaining: formal error code taxonomy documentation
+- [x] S-00.3 Close Phase03 research blockers (watch strategy, debounce/throttle defaults) ✅
+  - Watcher: chokidar via subprocess, debounce 5s default, throttle, watcher state machine
+- [x] S-00.4 Close Phase04 research blockers (node/edge schema, analyzer MVP) ✅
+  - Schema: file/symbol/external_module nodes, contains/imports/calls edges
+  - Analyzer: Rust engine with 8 language parsers
+- [x] S-00.5 Close Phase05 research blockers (tool schemas, selection rules, budgets) ✅
+  - 4 tools: codrag_status, codrag_build, codrag_search, codrag_context
+  - Budgets: k/max_chars/min_score caps in server.py
 
 ### Sprint S-01: Core trust loop (engine + contracts) 
 **Goal:** make “add → build → search → context” reliable and contract-stable.
@@ -93,15 +99,33 @@ These sprints are intentionally cross-phase. Each sprint should end with:
 **Goal:** predictable staleness detection and bounded incremental rebuild.
 
 - [x] S-03.1 Watcher + debounce + throttling behaviors (Phase03)
-- [ ] S-03.2 Incremental rebuild (hash + stable IDs) (Phase01/03)
+- [x] S-03.2 Incremental rebuild (hash + stable IDs) (Phase01/03) ✅
+  - Per-file hash map stored in `manifest.json` (`file_hashes: {path: hash}`)
+  - Cold-start incremental: loads previous index from disk when manifest has hashes (no in-memory state needed)
+  - Deleted file detection: `files_deleted` count in build stats, stale chunks excluded
+  - Noop detection: `mode="noop"` when nothing changed (all files reused, 0 embedded, 0 deleted)
+  - Tests: `tests/test_incremental_rebuild.py` (7 tests)
 - [x] S-03.3 Freshness UI and "what changed?" surfaces (Phase02/03) `WatchControlPanel` + `WatchStatusIndicator` + watch panel in dashboard
 
 ### Sprint S-04: Trace foundations + bounded expansion
 **Goal:** structural grounding that stays small, inspectable, and safe.
 
-- [ ] S-04.1 Trace schema + stable IDs + build integration (Phase04/01)
-- [ ] S-04.2 Trace API + dashboard symbol browser (Phase04/02)
-- [ ] S-04.3 Trace-aware context expansion budgets (Phase04/01/02/05)
+- [x] S-04.1 Trace schema + stable IDs + build integration (Phase04/01) ✅
+  - Rust engine: `codrag-walker`, `codrag-parser`, `codrag-graph`, `codrag-engine` (41 tests)
+  - Python: `TraceBuilder.build()` + `TraceIndex` load/search/neighbors/status
+  - 8 language parsers: Python, TS, JS, Go, Rust, Java, C, C++
+  - Server: `/projects/{id}/trace/*` endpoints (status, build, search, nodes, neighbors)
+- [x] S-04.2 Trace API + dashboard symbol browser (Phase04/02) ✅
+  - API endpoints: done (search, node, neighbors, build)
+  - `TraceStatusCard` UI component: done
+  - `TraceExplorer` symbol browser: done (search, detail pane, neighbor navigation)
+  - API client: `searchTrace`, `getTraceNode`, `getTraceNeighbors`, `buildTrace`
+  - Panel registered as 'trace' / 'Symbol Browser' in dashboard
+- [x] S-04.3 Trace-aware context expansion budgets (Phase04/01/02/05) ✅
+  - `get_context_with_trace_expansion()` in `index.py` — follows trace edges to include related code
+  - Server: `trace_expand` + `trace_max_chars` params on `POST /projects/{id}/context`
+  - MCP: `trace_expand` param on `codrag_context` tool
+  - Graceful fallback: returns normal context if trace not available
 
 ### Sprint S-05: IDE workflows (MCP) ✅ **LARGELY COMPLETE**
 **Goal:** stable MCP tools with conservative defaults and debuggable project selection.
@@ -138,46 +162,86 @@ These sprints are intentionally cross-phase. Each sprint should end with:
 - [ ] S-09.1 Embedded mode + network-mode safety baselines (Phase06)
 - [ ] S-09.2 Policy/config provenance UX implications (Phase06/02)
 
+### Sprint S-10: Context Intelligence (Phase16)
+**Goal:** native embeddings (no Ollama required), user-defined path weighting, CLaRa context compression.
+
+- [x] S-10.1 Native `nomic-embed-text` embedder via ONNX Runtime (Phase16) ✅
+  - `NativeEmbedder` class in `src/codrag/core/embedder.py`
+  - New deps: `onnxruntime`, `tokenizers`, `huggingface-hub`
+  - Auto-download model on first use to `~/.cache/huggingface/`
+  - Default embedder; Ollama becomes optional power-user config
+  - CLI: `codrag models` pre-downloads for air-gapped setups
+  - Tests: `tests/test_native_embedder.py` (12 tests)
+- [x] S-10.2 User-defined path weights for context weighting (Phase16) ✅
+  - `path_weights: Dict[str, float]` in `repo_policy.json`
+  - Applied at search time via `_resolve_path_weight()` (longest-prefix match)
+  - API: `GET/PUT /projects/{id}/path_weights` + `PUT /projects/{id}` accepts `path_weights`
+  - UI: weight editor (click ×1.0 badge) in FolderTree + FolderTreePanel + FileExplorerDetail
+  - Hot-update: weights apply immediately to searches without rebuild
+  - Tests: `tests/test_path_weights.py` (15 tests)
+- [x] S-10.3 CLaRa context compression via `CLaRa-Remembers-It-All` subtree (Phase16) ✅
+  - `ContextCompressor` ABC + `ClaraCompressor` + `NoopCompressor` in `src/codrag/core/compressor.py`
+  - Sidecar HTTP client calling CLaRa server at configurable URL (default `:8765`)
+  - API: `compression="clara"` param on `/projects/{id}/context` + `GET /clara/status`
+  - MCP: `codrag_context` tool accepts compression params
+  - Graceful fallback: returns uncompressed on timeout/error
+  - Tests: `tests/test_compressor.py` (19 tests)
+- [x] S-10.4 Update marketing copy to reflect embeddings as built-in core feature (Phase12/16) ✅
+  - All hero variants updated: "built-in embeddings", "no Ollama", path weights, CLaRa compression
+  - Public docs: guides for embeddings, path weights, and CLaRa in `websites/apps/docs/`
+
 ---
 
 ## Cross-phase implementation strategy ledger
 This section tracks shared decisions/strategies that must remain consistent across phases.
 
 ### STR-01: API response envelope and error model
-- **Status:** In progress
-- **Source of truth:** `docs/API.md` + Phase02 README “Response envelope” section
-- **Impacts:** Phase01 daemon responses, Phase02 UI error rendering, Phase05 MCP tool errors
-- **Next actions:** finalize minimum `error.code` taxonomy and ensure parity across HTTP + MCP
+- **Status:** ✅ Implemented
+- **Source of truth:** `docs/API.md` + `src/codrag/server.py` (`ApiException`, `ok()` helper)
+- **Implementation:** `{ok: true, data: ...}` / `{ok: false, error: {code, message, hint}}` envelope.
+  `ApiException` with status_code/code/message/hint. Parity across HTTP + MCP.
+- **Remaining:** formal error code taxonomy documentation
 
 ### STR-02: Stable IDs (chunks, files, trace nodes)
-- **Status:** In progress
-- **Impacts:** Phase01 persistence, Phase03 incremental rebuild, Phase02 citations, Phase04 trace IDs
-- **Next actions:** lock stable key derivations and document guarantees/limitations
+- **Status:** ✅ Implemented
+- **Implementation:** `src/codrag/core/ids.py` — sha256-based derivations:
+  - `stable_file_hash(content)` → 16-char hex
+  - `stable_markdown_chunk_id(path, section, idx)`, `stable_code_chunk_id(path, idx)`
+  - `stable_file_node_id(path)`, `stable_symbol_node_id(qualname, path, line)`
+  - `stable_edge_id(kind, source, target)`
+- **Guarantees:** deterministic, content-addressed for files, position-stable for chunks/nodes
 
 ### STR-03: Manifest schema + format versioning
-- **Status:** In progress
-- **Impacts:** Phase01 storage, Phase03 rebuild correctness, Phase07 upgrade/recovery, Phase11 upgrade UX
-- **Next actions:** define required fields and compatibility behavior (`format_version`, rebuild prompts)
+- **Status:** ✅ Implemented
+- **Implementation:** `src/codrag/core/manifest.py` — `MANIFEST_VERSION = "1.0"`
+  Fields: version, built_at, model, roots, count, embedding_dim, build (stats), config, file_hashes
+- **Remaining:** formal `format_version` bump policy for breaking changes
 
 ### STR-04: Atomic build + last-known-good snapshot behavior
-- **Status:** Proposed
-- **Impacts:** Phase01 implementation, Phase02 status UX, Phase07 recovery tests
-- **Next actions:** specify temp-dir swap rules + what happens on crash/interruption
+- **Status:** ✅ Implemented (atomic build); partial (snapshot)
+- **Implementation:** `CodeIndex._swap_index_dir()` — temp dir → backup → rename → cleanup.
+  `_cleanup_stale_builds()` removes orphaned temp dirs older than 1 hour.
+- **Remaining:** P01-I8 — search/context from snapshot while build runs (currently blocks)
 
 ### STR-05: Output budgets and backpressure policy
-- **Status:** Proposed
-- **Impacts:** Phase02 UI defaults, Phase05 MCP defaults, Phase04 trace traversal caps
-- **Next actions:** server-enforced max caps + UI/MCP conservative defaults
+- **Status:** ✅ Implemented
+- **Implementation:** server-enforced caps in `server.py`:
+  - search: k ≤ 100, min_score ≥ 0.0
+  - context: max_chars ≤ 20,000, k ≤ 50
+  - MCP: MAX_SEARCH_K=100, MAX_CONTEXT_K=50, MAX_CONTEXT_CHARS=20,000
+  - trace: max_nodes ≤ 100, max_edges ≤ 200, hops ≤ 3
 
 ### STR-06: Watcher strategy (OS events vs polling fallback)
-- **Status:** Proposed
-- **Impacts:** Phase03 implementation, Phase07 cross-platform matrix, Phase08 desktop expectations
-- **Next actions:** pick library + define fallback behavior and default intervals
+- **Status:** ✅ Implemented
+- **Implementation:** chokidar via Node.js subprocess (`src/codrag/watcher.py`).
+  Debounce 5s default, throttle, state machine (disabled/idle/debouncing/building/throttled).
+  Falls back gracefully if Node.js unavailable.
 
 ### STR-07: Trace analyzer strategy
-- **Status:** Proposed
-- **Impacts:** Phase04 build time/perf, Phase02 trace UX, Phase05 trace tool output size
-- **Next actions:** confirm Python AST MVP scope; decide if TS uses regex or tree-sitter
+- **Status:** ✅ Implemented
+- **Implementation:** Rust engine with tree-sitter parsers for 8 languages.
+  Python fallback via AST module. PyO3 bridge (`codrag_engine`).
+  `CODRAG_ENGINE=rust|python|auto` env var for selection.
 
 ### STR-08: Packaging strategy (Python sidecar)
 - **Status:** Proposed
@@ -185,9 +249,11 @@ This section tracks shared decisions/strategies that must remain consistent acro
 - **Next actions:** decide PyInstaller vs PyOxidizer for MVP and document rationale
 
 ### STR-09: Licensing + feature gating strategy
-- **Status:** Proposed
-- **Impacts:** Phase07 enforcement points, Phase11 offline distribution, Phase02 UI affordances
-- **Next actions:** decide offline signed keys flow + which features are gated (2-project limit, trace)
+- **Status:** ✅ Decided
+- **Implementation:** Lemon Squeezy as MoR. "Activation Exchange" flow:
+  LS issues key → user enters in app → exchange via api.codrag.io → signed Ed25519 offline license.
+  Documented in ADR-013 + `docs/Phase11_Deployment/LEMON_SQUEEZY_INTEGRATION.md`.
+- **Remaining:** actual enforcement code in Tauri app (S-07)
 
 ---
 

@@ -421,6 +421,7 @@ class TraceBuilder:
         edges: List[TraceEdge] = []
         external_modules: Dict[str, TraceNode] = {}
         file_errors: List[FileError] = []
+        file_hashes: Dict[str, str] = {}  # rel_path -> content hash
         files_parsed = 0
         files_failed = 0
 
@@ -429,6 +430,13 @@ class TraceBuilder:
                 progress_callback("trace_scan", i, len(files))
 
             rel_path = _to_posix(str(file_path.relative_to(self.repo_root)))
+
+            # Read source and compute content hash for staleness detection
+            try:
+                source = file_path.read_text(encoding="utf-8", errors="ignore")
+            except Exception:
+                source = ""
+            file_hashes[rel_path] = stable_file_hash(source)
 
             file_node = TraceNode(
                 id=stable_file_node_id(rel_path),
@@ -444,7 +452,6 @@ class TraceBuilder:
             language = _detect_language(rel_path)
             if language == "python":
                 try:
-                    source = file_path.read_text(encoding="utf-8", errors="ignore")
                     analyzer = PythonAnalyzer(rel_path, source, self.repo_root)
                     sym_nodes, sym_edges = analyzer.analyze()
                     nodes.extend(sym_nodes)
@@ -492,6 +499,7 @@ class TraceBuilder:
                 files_failed=files_failed,
                 file_errors=file_errors,
                 last_error=validation_error,
+                file_hashes=file_hashes,
             )
             self._write_manifest(manifest)
             return manifest
@@ -505,6 +513,7 @@ class TraceBuilder:
             files_failed=files_failed,
             file_errors=file_errors,
             last_error=None,
+            file_hashes=file_hashes,
         )
         self._write_manifest(manifest)
 
@@ -686,8 +695,9 @@ class TraceBuilder:
         files_failed: int,
         file_errors: List[FileError],
         last_error: Optional[str],
+        file_hashes: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
-        return {
+        manifest: Dict[str, Any] = {
             "version": TRACE_MANIFEST_VERSION,
             "built_at": datetime.now(timezone.utc).isoformat(),
             "project": {
@@ -707,6 +717,9 @@ class TraceBuilder:
             "file_errors": [{"file_path": e.file_path, "error_type": e.error_type, "message": e.message} for e in file_errors],
             "last_error": last_error,
         }
+        if file_hashes is not None:
+            manifest["file_hashes"] = file_hashes
+        return manifest
 
     def _write_manifest(self, manifest: Dict[str, Any]) -> None:
         tmp = tempfile.NamedTemporaryFile(
@@ -959,3 +972,165 @@ def build_trace(
         max_file_bytes=max_file_bytes,
     )
     return builder.build(progress_callback=progress_callback)
+
+
+def compute_trace_coverage(
+    repo_root: Path,
+    index_dir: Path,
+    include_globs: Optional[List[str]] = None,
+    exclude_globs: Optional[List[str]] = None,
+    max_file_bytes: int = 500_000,
+) -> Dict[str, Any]:
+    """
+    Compute trace coverage by comparing current filesystem against trace manifest.
+
+    Returns dict with:
+      - traced: files that are traced and up-to-date
+      - untraced: files eligible for trace but not yet traced
+      - stale: files that were traced but content has changed
+      - ignored: files explicitly excluded by trace ignore patterns
+      - summary: {total, traced, untraced, stale, ignored, coverage_pct}
+    """
+    repo_root = Path(repo_root).resolve()
+
+    if include_globs is None:
+        include_globs = ["**/*.py", "**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+    if exclude_globs is None:
+        exclude_globs = [
+            "**/node_modules/**",
+            "**/.git/**",
+            "**/venv/**",
+            "**/__pycache__/**",
+            "**/dist/**",
+            "**/build/**",
+        ]
+
+    # Load trace manifest file_hashes (if exists)
+    manifest_path = Path(index_dir) / "trace_manifest.json"
+    manifest_hashes: Dict[str, str] = {}
+    manifest_built_at: Optional[str] = None
+    if manifest_path.exists():
+        try:
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                manifest = json.load(f)
+            manifest_hashes = manifest.get("file_hashes") or {}
+            manifest_built_at = manifest.get("built_at")
+        except Exception:
+            pass
+
+    # Enumerate all files in repo (both eligible and ignored)
+    traced_files: List[Dict[str, Any]] = []
+    untraced_files: List[Dict[str, Any]] = []
+    stale_files: List[Dict[str, Any]] = []
+    ignored_files: List[Dict[str, Any]] = []
+
+    for root_dir, _dirs, filenames in os.walk(repo_root):
+        root_path = Path(root_dir)
+        for fname in filenames:
+            file_path = root_path / fname
+            if file_path.is_symlink():
+                continue
+
+            rel_path = _to_posix(str(file_path.relative_to(repo_root)))
+
+            # Check if file matches include globs at all (only code files)
+            base = os.path.basename(rel_path)
+            matches_any_include = False
+            if not include_globs:
+                matches_any_include = True
+            else:
+                for g in include_globs:
+                    patterns = [g]
+                    if g.startswith("**/"):
+                        patterns.append(g[3:])
+                    for p in patterns:
+                        if fnmatch(rel_path, p) or fnmatch(base, p):
+                            matches_any_include = True
+                            break
+                    if matches_any_include:
+                        break
+
+            if not matches_any_include:
+                continue
+
+            # Check if excluded
+            is_excluded = False
+            for g in exclude_globs:
+                patterns = [g]
+                if g.startswith("**/"):
+                    patterns.append(g[3:])
+                for p in patterns:
+                    if fnmatch(rel_path, p) or fnmatch(base, p):
+                        is_excluded = True
+                        break
+                if is_excluded:
+                    break
+
+            # Get file stat for timestamps
+            try:
+                stat = file_path.stat()
+                file_size = stat.st_size
+                modified_ts = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat()
+                created_ts = datetime.fromtimestamp(stat.st_birthtime, tz=timezone.utc).isoformat() if hasattr(stat, 'st_birthtime') else modified_ts
+            except OSError:
+                continue
+
+            if file_size > max_file_bytes:
+                continue
+
+            language = _detect_language(rel_path)
+
+            file_info: Dict[str, Any] = {
+                "path": rel_path,
+                "language": language,
+                "size": file_size,
+                "modified": modified_ts,
+                "created": created_ts,
+            }
+
+            if is_excluded:
+                ignored_files.append(file_info)
+                continue
+
+            # Compare against manifest hashes
+            prev_hash = manifest_hashes.get(rel_path)
+            if prev_hash is None:
+                # Not in trace manifest → untraced
+                untraced_files.append(file_info)
+            else:
+                # Was traced — check if stale
+                try:
+                    source = file_path.read_text(encoding="utf-8", errors="ignore")
+                    current_hash = stable_file_hash(source)
+                except Exception:
+                    current_hash = ""
+
+                if current_hash != prev_hash:
+                    stale_files.append(file_info)
+                else:
+                    traced_files.append(file_info)
+
+    # Sort lists by path
+    traced_files.sort(key=lambda f: f["path"])
+    untraced_files.sort(key=lambda f: f["path"])
+    stale_files.sort(key=lambda f: f["path"])
+    ignored_files.sort(key=lambda f: f["path"])
+
+    total = len(traced_files) + len(untraced_files) + len(stale_files)
+    coverage_pct = round(len(traced_files) / total * 100, 1) if total > 0 else 0.0
+
+    return {
+        "traced": traced_files,
+        "untraced": untraced_files,
+        "stale": stale_files,
+        "ignored": ignored_files,
+        "summary": {
+            "total": total,
+            "traced": len(traced_files),
+            "untraced": len(untraced_files),
+            "stale": len(stale_files),
+            "ignored": len(ignored_files),
+            "coverage_pct": coverage_pct,
+            "last_build_at": manifest_built_at,
+        },
+    }

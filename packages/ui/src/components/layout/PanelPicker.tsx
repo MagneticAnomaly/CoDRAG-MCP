@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Check, ClipboardCopy, ClipboardPaste, Columns3, Plus, RotateCcw } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Check, ClipboardCopy, ClipboardPaste, Columns, Plus, RotateCcw } from 'lucide-react';
 import type { DashboardLayout, PanelDefinition } from '../../types/layout';
 import { cn } from '../../lib/utils';
 import { Button } from '../primitives/Button';
@@ -26,10 +26,36 @@ export function PanelPicker({
   className,
 }: PanelPickerProps) {
   const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLDivElement>(null);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
 
   const visibleIds = new Set(
     layout.panels.filter((p) => p.visible).map((p) => p.id)
   );
+
+  // Calculate fixed position from button's bounding rect
+  const updatePosition = useCallback(() => {
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const dropdownHeight = 400; // approximate max height
+    const openUp = spaceBelow < dropdownHeight && spaceAbove > spaceBelow;
+
+    setDropdownStyle({
+      position: 'fixed' as const,
+      left: Math.max(8, rect.left),
+      width: 256,
+      zIndex: 50,
+      ...(openUp
+        ? { bottom: window.innerHeight - rect.top + 4 }
+        : { top: rect.bottom + 4 }),
+    });
+  }, []);
+
+  useEffect(() => {
+    if (open) updatePosition();
+  }, [open, updatePosition]);
 
   const handleToggle = (panelId: string) => {
     onTogglePanel(panelId);
@@ -43,11 +69,10 @@ export function PanelPicker({
   };
 
   return (
-    <div className={cn('relative', className)}>
+    <div ref={buttonRef} className={cn('relative', className)}>
       <Button
         onClick={() => setOpen(!open)}
         variant="outline"
-        size="sm"
         aria-expanded={open}
         aria-haspopup="true"
         icon={Plus}
@@ -63,8 +88,10 @@ export function PanelPicker({
             onClick={() => setOpen(false)}
           />
 
-          {/* Dropdown */}
-          <div className="absolute right-0 top-full mt-2 w-64 bg-surface border border-border rounded-lg shadow-lg z-50 overflow-hidden">
+          {/* Dropdown — fixed position to escape overflow parents */}
+          <div
+            style={dropdownStyle}
+            className="bg-surface border border-border rounded-lg shadow-lg overflow-hidden">
             <div className="p-2 border-b border-border">
               <span className="text-xs font-medium text-text-muted uppercase tracking-wide">
                 Toggle Panels
@@ -103,7 +130,7 @@ export function PanelPicker({
                   variant="ghost"
                   size="sm"
                   className="w-full justify-center text-text-muted hover:text-text hover:bg-muted"
-                  icon={Columns3}
+                  icon={Columns}
                 >
                   Refit Layout
                 </Button>
@@ -146,3 +173,4 @@ export function PanelPicker({
     </div>
   );
 }
+

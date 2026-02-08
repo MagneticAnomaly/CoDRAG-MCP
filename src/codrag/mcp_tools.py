@@ -53,7 +53,7 @@ TOOLS = [
     },
     {
         "name": "codrag_context",
-        "description": "Get assembled context for LLM prompt injection. Returns formatted chunks optimized for token efficiency.",
+        "description": "Get assembled context for LLM prompt injection. Returns formatted chunks optimized for token efficiency. Optionally compress context via CLaRa sidecar.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -70,6 +70,28 @@ TOOLS = [
                     "type": "integer",
                     "description": "Maximum characters in assembled context. Default: 6000.",
                     "default": 6000,
+                },
+                "trace_expand": {
+                    "type": "boolean",
+                    "description": "Follow trace edges (imports, calls) to include structurally related code. Requires trace index to be built. Default: false.",
+                    "default": False,
+                },
+                "compression": {
+                    "type": "string",
+                    "description": "Compression mode: 'none' (default) or 'clara' (CLaRa sidecar).",
+                    "enum": ["none", "clara"],
+                    "default": "none",
+                },
+                "compression_level": {
+                    "type": "string",
+                    "description": "Compression aggressiveness: 'light', 'standard' (default), or 'aggressive'.",
+                    "enum": ["light", "standard", "aggressive"],
+                    "default": "standard",
+                },
+                "compression_timeout_s": {
+                    "type": "number",
+                    "description": "Hard timeout for CLaRa compression in seconds. Default: 30.",
+                    "default": 30.0,
                 },
             },
             "required": ["query"],

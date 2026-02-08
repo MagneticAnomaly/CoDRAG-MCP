@@ -68,6 +68,26 @@ def _normalize_role_weights(v: Any) -> Dict[str, float]:
     return out or dict(DEFAULT_ROLE_WEIGHTS)
 
 
+def _normalize_path_weights(v: Any) -> Dict[str, float]:
+    """Normalize user-defined path weight overrides.
+
+    Keys are relative paths (folders or files), values are floats 0.0–2.0.
+    Folder weights propagate to children at search time; children can override.
+    """
+    if not isinstance(v, dict):
+        return {}
+    out: Dict[str, float] = {}
+    for k, val in v.items():
+        if not isinstance(k, str) or not k.strip():
+            continue
+        try:
+            w = float(val)
+        except (TypeError, ValueError):
+            continue
+        out[k.strip().strip("/")] = max(0.0, min(2.0, round(w, 2)))
+    return out
+
+
 def _normalize_primer_config(v: Any) -> Dict[str, Any]:
     """Normalize primer configuration, filling in defaults for missing fields."""
     if not isinstance(v, dict):
@@ -109,6 +129,7 @@ def policy_from_profile(profile: Dict[str, Any], repo_root: Path) -> Dict[str, A
         "include_globs": _normalize_globs(rec.get("include_globs")),
         "exclude_globs": _normalize_globs(rec.get("exclude_globs")),
         "role_weights": _normalize_role_weights(rec.get("role_weights")),
+        "path_weights": _normalize_path_weights(rec.get("path_weights")),
         "primer": _normalize_primer_config(rec.get("primer")),
         "path_roles": profile.get("path_roles") or [],
         "detected_languages": profile.get("detected_languages") or [],
@@ -128,6 +149,7 @@ def ensure_repo_policy(index_dir: Path, repo_root: Path, force: bool = False) ->
             existing["include_globs"] = _normalize_globs(existing.get("include_globs"))
             existing["exclude_globs"] = _normalize_globs(existing.get("exclude_globs"))
             existing["role_weights"] = _normalize_role_weights(existing.get("role_weights"))
+            existing["path_weights"] = _normalize_path_weights(existing.get("path_weights"))
             existing["primer"] = _normalize_primer_config(existing.get("primer"))
             return existing
 

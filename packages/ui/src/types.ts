@@ -176,6 +176,42 @@ export interface TraceStatus {
 }
 
 /**
+ * File entry in trace coverage report
+ */
+export interface TraceCoverageFile {
+  path: string;
+  language: string | null;
+  size: number;
+  modified: string;
+  created: string;
+}
+
+/**
+ * Trace coverage summary
+ */
+export interface TraceCoverageSummary {
+  total: number;
+  traced: number;
+  untraced: number;
+  stale: number;
+  ignored: number;
+  coverage_pct: number;
+  last_build_at: string | null;
+}
+
+/**
+ * Full trace coverage report from API
+ */
+export interface TraceCoverage {
+  traced: TraceCoverageFile[];
+  untraced: TraceCoverageFile[];
+  stale: TraceCoverageFile[];
+  ignored: TraceCoverageFile[];
+  summary: TraceCoverageSummary;
+  building: boolean;
+}
+
+/**
  * Trace expand options for context assembly
  */
 export interface TraceExpandOptions {

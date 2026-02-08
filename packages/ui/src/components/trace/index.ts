@@ -12,3 +12,9 @@ export type { NodeDetailPanelProps } from './NodeDetailPanel';
 
 export { TraceGraph, TraceGraphMini } from './TraceGraph';
 export type { TraceGraphProps, TraceNode, TraceEdge } from './TraceGraph';
+
+export { TraceExplorer } from './TraceExplorer';
+export type { TraceExplorerProps } from './TraceExplorer';
+
+export { TraceCoveragePanel } from './TraceCoveragePanel';
+export type { TraceCoveragePanelProps } from './TraceCoveragePanel';

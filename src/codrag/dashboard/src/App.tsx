@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { RefreshCw, FileText } from 'lucide-react'
+import { RefreshCw, FileText, Settings, X, ImageIcon } from 'lucide-react'
 import {
   // API
   useApiClient,
@@ -25,12 +25,14 @@ import {
   AddProjectModal,
   FolderTreePanel,
   FileExplorerDetail,
+  // Trace
+  TraceExplorer,
+  TraceCoveragePanel,
   type PinnedTextFile,
   // Watch
   WatchControlPanel,
   // Patterns
   LoadingState,
-  ErrorState,
   EmptyState,
   // Primitives
   Button,
@@ -49,8 +51,10 @@ import {
   type WatchStatus,
   type ProjectMode,
   type DashboardLayoutApi,
+  type DashboardLayout,
   type PanelDefinition,
   // Layout
+  PanelPicker,
   PANEL_REGISTRY,
 } from '@codrag/ui'
 import 'react-grid-layout/css/styles.css'
@@ -126,14 +130,14 @@ function ConnectivityStatus() {
   }, [api])
 
   if (status === 'connected') return (
-    <div className="fixed top-4 right-4 z-50 flex items-center gap-2 px-3 py-1.5 bg-surface/80 backdrop-blur border border-border rounded-full shadow-sm text-xs font-medium text-text-muted">
+    <div className="fixed top-4 left-72 z-50 flex items-center gap-2 px-3 py-1.5 bg-surface/80 backdrop-blur border border-border rounded-full shadow-sm text-xs font-medium text-text-muted">
       <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
       Daemon Connected
     </div>
   )
   
   if (status === 'disconnected') return (
-    <div className="fixed top-4 right-4 z-50 flex items-center gap-2 px-3 py-1.5 bg-error/10 border border-error/20 rounded-full shadow-sm text-xs font-medium text-error">
+    <div className="fixed top-4 left-72 z-50 flex items-center gap-2 px-3 py-1.5 bg-error/10 border border-error/20 rounded-full shadow-sm text-xs font-medium text-error">
       <div className="w-2 h-2 rounded-full bg-error" />
       Daemon Disconnected
     </div>
@@ -142,46 +146,124 @@ function ConnectivityStatus() {
   return null
 }
 
-// ── Debug Panel ──────────────────────────────────────────────
-function DebugPanel() {
-  const api = useApiClient();
-  const [lastResult, setLastResult] = useState<string>('No test run yet');
+// ── Dev Settings Panel ───────────────────────────────────────
+interface DevSettingsPanelProps {
+  open: boolean
+  onClose: () => void
+  uiMode: 'light' | 'dark'
+  onModeChange: (mode: 'light' | 'dark') => void
+  uiTheme: string
+  onThemeChange: (theme: string) => void
+  bgImage: string | null
+  onBgImageChange: (url: string | null) => void
+}
 
-  const runTest = async () => {
-    setLastResult('Testing connection...');
+function DevSettingsPanel({
+  open,
+  onClose,
+  uiMode,
+  onModeChange,
+  uiTheme,
+  onThemeChange,
+  bgImage,
+  onBgImageChange,
+}: DevSettingsPanelProps) {
+  const api = useApiClient()
+  const [healthResult, setHealthResult] = useState<string>('No test run yet')
+
+  const runHealthTest = async () => {
+    setHealthResult('Testing...')
     try {
-      // Access private field hack for debugging if needed, or just infer from behavior
-      const health = await api.getHealth();
-      setLastResult(`Success: ${JSON.stringify(health)}`);
+      const health = await api.getHealth()
+      setHealthResult(`OK: ${JSON.stringify(health)}`)
     } catch (err) {
-      setLastResult(`Error: ${err instanceof Error ? err.message : String(err)}`);
+      setHealthResult(`Error: ${err instanceof Error ? err.message : String(err)}`)
     }
-  };
+  }
+
+  const handleBgUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => onBgImageChange(reader.result as string)
+    reader.readAsDataURL(file)
+  }
+
+  if (!open) return null
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-surface border-t border-border p-4 text-xs font-mono z-50 max-h-48 overflow-auto shadow-lg opacity-90 hover:opacity-100 transition-opacity">
-      <div className="flex items-center gap-4 mb-2">
-        <h3 className="font-bold text-text">Connection Debugger</h3>
-        <button 
-          onClick={runTest}
-          className="px-2 py-1 bg-primary text-primary-foreground rounded hover:bg-primary/90"
-        >
-          Test /health
-        </button>
+    <div className="fixed inset-y-0 right-0 z-50 w-80 bg-surface border-l border-border shadow-lg flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+        <h2 className="text-sm font-semibold text-text flex items-center gap-2">
+          <Settings className="w-4 h-4" />
+          Dev Settings
+        </h2>
+        <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close">
+          <X className="w-4 h-4" />
+        </Button>
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <p><strong>Window Origin:</strong> {window.location.origin}</p>
-          {/* @ts-ignore */}
-          <p><strong>API Base URL:</strong> {api.baseUrl || '(hidden)'}</p> 
-          <p><strong>Browser:</strong> {navigator.userAgent}</p>
-        </div>
-        <div className="bg-background p-2 rounded border border-border">
-          <pre className="whitespace-pre-wrap break-all">{lastResult}</pre>
-        </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        {/* Style Picker */}
+        <section>
+          <h3 className="text-xs font-medium text-text-muted uppercase tracking-wide mb-2">Appearance</h3>
+          <div className="space-y-2">
+            <Select
+              value={uiMode}
+              onChange={(e) => onModeChange(e.target.value as 'light' | 'dark')}
+              aria-label="Color Mode"
+              size="sm"
+              options={MODE_OPTIONS}
+            />
+            <Select
+              value={uiTheme}
+              onChange={(e) => onThemeChange(e.target.value)}
+              aria-label="Visual Theme"
+              size="sm"
+              options={THEME_OPTIONS}
+            />
+          </div>
+        </section>
+
+        {/* Background Image */}
+        <section>
+          <h3 className="text-xs font-medium text-text-muted uppercase tracking-wide mb-2">Background Image</h3>
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 px-3 py-2 border border-dashed border-border rounded cursor-pointer hover:bg-surface-raised transition-colors text-sm text-text-muted">
+              <ImageIcon className="w-4 h-4" />
+              {bgImage ? 'Change image...' : 'Upload image...'}
+              <input type="file" accept="image/*" onChange={handleBgUpload} className="hidden" />
+            </label>
+            {bgImage && (
+              <Button variant="ghost" size="sm" onClick={() => onBgImageChange(null)} className="w-full text-text-muted">
+                Remove background
+              </Button>
+            )}
+          </div>
+        </section>
+
+        {/* Connection Debugger */}
+        <section>
+          <h3 className="text-xs font-medium text-text-muted uppercase tracking-wide mb-2">Connection Debugger</h3>
+          <div className="space-y-2 text-xs font-mono">
+            <Button variant="outline" size="sm" onClick={runHealthTest} className="w-full">
+              Test /health
+            </Button>
+            <div className="bg-background p-2 rounded border border-border">
+              <pre className="whitespace-pre-wrap break-all text-text">{healthResult}</pre>
+            </div>
+            <div className="space-y-1 text-text-muted">
+              <p><strong className="text-text">Origin:</strong> {window.location.origin}</p>
+              {/* @ts-ignore */}
+              <p><strong className="text-text">API URL:</strong> {api.baseUrl || '(hidden)'}</p>
+              <p><strong className="text-text">UA:</strong> {navigator.userAgent.slice(0, 60)}...</p>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
-  );
+  )
 }
 
 // ── App ──────────────────────────────────────────────────────
@@ -191,7 +273,7 @@ function App() {
 
   // ── Global state ───────────────────────────────────────────
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [_error, setError] = useState<string | null>(null) // TODO: wire to error toast
 
   // ── Project list ───────────────────────────────────────────
   const [projects, setProjects] = useState<ProjectListItem[]>([])
@@ -204,6 +286,9 @@ function App() {
   // ── UI preferences ─────────────────────────────────────────
   const [uiMode, setUiMode] = useState<'light' | 'dark'>('light')
   const [uiTheme, setUiTheme] = useState<string>('none')
+  const [devSettingsOpen, setDevSettingsOpen] = useState(false)
+  const [bgImage, setBgImage] = useState<string | null>(null)
+  const [dashboardLayout, setDashboardLayout] = useState<DashboardLayout | null>(null)
 
   // ── Search state ───────────────────────────────────────────
   const [query, setQuery] = useState<string>('')
@@ -222,8 +307,11 @@ function App() {
   const [context, setContext] = useState<string>('')
   const [contextMeta, setContextMeta] = useState<ContextMeta | null>(null)
 
-  // ── Roots state ────────────────────────────────────────────
-  const [rootNames, setRootNames] = useState<string[]>([])
+  // ── File tree state ──────────────────────────────────────
+  const [fileTree, setFileTree] = useState<TreeNode[]>([])
+
+  // ── Path weights state ────────────────────────────────────
+  const [pathWeights, setPathWeights] = useState<Record<string, number>>({})
 
   // ── Pinned files state ──────────────────────────────────────
   const [pinnedPaths, setPinnedPaths] = useState<Set<string>>(() => {
@@ -253,6 +341,21 @@ function App() {
     auto_rebuild: { enabled: false, debounce_ms: 5000 },
   })
   const [configDirty, setConfigDirty] = useState(false)
+
+  // ── Trace state ───────────────────────────────────────────
+  const [traceStatus, setTraceStatus] = useState<{ enabled: boolean; exists: boolean; building: boolean; counts: { nodes: number; edges: number } }>({
+    enabled: false, exists: false, building: false, counts: { nodes: 0, edges: 0 },
+  })
+
+  // ── Trace coverage state ────────────────────────────────────
+  const [traceCoverage, setTraceCoverage] = useState<{
+    summary: { total: number; traced: number; untraced: number; stale: number; ignored: number; coverage_pct: number; last_build_at: string | null } | null;
+    untraced: Array<{ path: string; language: string | null; size: number; modified: string; created: string }>;
+    stale: Array<{ path: string; language: string | null; size: number; modified: string; created: string }>;
+    ignored: Array<{ path: string; language: string | null; size: number; modified: string; created: string }>;
+    building: boolean;
+    loading: boolean;
+  }>({ summary: null, untraced: [], stale: [], ignored: [], building: false, loading: false })
 
   // ── LLM config state ───────────────────────────────────────
   const [llmConfig, setLLMConfig] = useState<LLMConfig>({
@@ -622,6 +725,96 @@ function App() {
     }
   }, [handleUnpinFile])
 
+  const handlePathWeightChange = useCallback((path: string, weight: number | null) => {
+    if (!selectedProjectId) return
+    setPathWeights((prev) => {
+      const next = { ...prev }
+      if (weight === null) {
+        delete next[path]
+      } else {
+        next[path] = weight
+      }
+      // Persist to backend (fire-and-forget)
+      api.updatePathWeights(selectedProjectId, next).catch(() => {})
+      return next
+    })
+  }, [api, selectedProjectId])
+
+  const handleSearchTrace = useCallback(async (query: string, kinds?: string[], limit?: number) => {
+    if (!selectedProjectId) return { nodes: [] }
+    return api.searchTrace(selectedProjectId, query, kinds, limit)
+  }, [api, selectedProjectId])
+
+  const handleGetTraceNode = useCallback(async (nodeId: string) => {
+    if (!selectedProjectId) throw new Error('No project selected')
+    return api.getTraceNode(selectedProjectId, nodeId)
+  }, [api, selectedProjectId])
+
+  const handleGetTraceNeighbors = useCallback(async (nodeId: string, direction?: string) => {
+    if (!selectedProjectId) throw new Error('No project selected')
+    return api.getTraceNeighbors(selectedProjectId, nodeId, direction)
+  }, [api, selectedProjectId])
+
+  const handleBuildTrace = useCallback(() => {
+    if (!selectedProjectId) return
+    api.buildTrace(selectedProjectId).then(() => {
+      setTraceStatus(prev => ({ ...prev, building: true }))
+    }).catch(() => {})
+  }, [api, selectedProjectId])
+
+  const handleEnableTrace = useCallback(() => {
+    if (!selectedProjectId) return
+    const newConfig = { ...projectConfig, trace: { ...projectConfig.trace, enabled: true } }
+    setProjectConfig(newConfig)
+    setConfigDirty(true)
+    api.updateProject(selectedProjectId, { config: newConfig }).catch(() => {})
+    setTraceStatus(prev => ({ ...prev, enabled: true }))
+  }, [api, selectedProjectId, projectConfig])
+
+  const fetchTraceCoverage = useCallback(() => {
+    if (!selectedProjectId || !traceStatus.enabled) return
+    setTraceCoverage(prev => ({ ...prev, loading: true }))
+    api.getTraceCoverage(selectedProjectId).then((data) => {
+      setTraceCoverage({
+        summary: data.summary,
+        untraced: data.untraced,
+        stale: data.stale,
+        ignored: data.ignored,
+        building: data.building,
+        loading: false,
+      })
+    }).catch(() => {
+      setTraceCoverage(prev => ({ ...prev, loading: false }))
+    })
+  }, [api, selectedProjectId, traceStatus.enabled])
+
+  const handleTraceAll = useCallback(() => {
+    if (!selectedProjectId) return
+    api.buildTrace(selectedProjectId).then(() => {
+      setTraceStatus(prev => ({ ...prev, building: true }))
+      setTraceCoverage(prev => ({ ...prev, building: true }))
+    }).catch(() => {})
+  }, [api, selectedProjectId])
+
+  const handleRetraceStale = useCallback(() => {
+    // Re-trace triggers a full trace rebuild (same as trace all)
+    handleTraceAll()
+  }, [handleTraceAll])
+
+  const handleAddIgnorePattern = useCallback((pattern: string) => {
+    if (!selectedProjectId) return
+    api.updateTraceIgnore(selectedProjectId, 'add', [pattern]).then(() => {
+      fetchTraceCoverage()
+    }).catch(() => {})
+  }, [api, selectedProjectId, fetchTraceCoverage])
+
+  const handleRemoveIgnorePattern = useCallback((pattern: string) => {
+    if (!selectedProjectId) return
+    api.updateTraceIgnore(selectedProjectId, 'remove', [pattern]).then(() => {
+      fetchTraceCoverage()
+    }).catch(() => {})
+  }, [api, selectedProjectId, fetchTraceCoverage])
+
   const handleLoadFileContent = useCallback(async (path: string): Promise<string> => {
     if (!selectedProjectId) throw new Error('No project selected')
     const data = await api.getProjectFileContent(selectedProjectId, path)
@@ -680,10 +873,26 @@ function App() {
     if (!selectedProjectId) return
     void refreshStatus(selectedProjectId)
     void refreshWatchStatus(selectedProjectId)
-    // Fetch roots
-    api.getProjectRoots(selectedProjectId).then((data) => {
-      setRootNames(data.roots ?? [])
-    }).catch(() => { setRootNames([]) })
+    // Fetch file tree
+    api.getProjectFiles(selectedProjectId, '', 4).then((data) => {
+      setFileTree(data.tree ?? [])
+    }).catch(() => { setFileTree([]) })
+    // Fetch path weights
+    api.getPathWeights(selectedProjectId).then((data) => {
+      setPathWeights(data.path_weights ?? {})
+    }).catch(() => { setPathWeights({}) })
+    // Fetch trace status
+    api.getTraceStatus(selectedProjectId).then((data) => {
+      setTraceStatus({
+        enabled: data.enabled ?? false,
+        exists: data.exists ?? false,
+        building: data.building ?? false,
+        counts: data.counts ?? { nodes: 0, edges: 0 },
+      })
+    }).then(() => {
+      // Fetch trace coverage after status is known
+      fetchTraceCoverage()
+    }).catch(() => { setTraceStatus({ enabled: false, exists: false, building: false, counts: { nodes: 0, edges: 0 } }) })
     // Load project config
     api.getProject(selectedProjectId).then((data) => {
       const cfg = data.project.config
@@ -807,12 +1016,14 @@ function App() {
     ),
     roots: (
       <FolderTreePanel
-        data={rootNames.map((name): TreeNode => ({ name, type: 'folder', children: [] }))}
+        data={fileTree}
         includedPaths={pinnedPaths}
         onToggleInclude={(paths, action) => {
           if (action === 'add') paths.forEach(handlePinFile)
           else paths.forEach(handleUnpinFile)
         }}
+        pathWeights={pathWeights}
+        onWeightChange={handlePathWeightChange}
         bare
       />
     ),
@@ -850,14 +1061,44 @@ function App() {
         />
       </div>
     ),
+    trace: (
+      <TraceExplorer
+        traceEnabled={traceStatus.enabled}
+        traceExists={traceStatus.exists}
+        traceBuilding={traceStatus.building}
+        traceCounts={traceStatus.counts}
+        onSearchTrace={handleSearchTrace}
+        onGetNode={handleGetTraceNode}
+        onGetNeighbors={handleGetTraceNeighbors}
+        onBuildTrace={handleBuildTrace}
+        onEnableTrace={handleEnableTrace}
+      />
+    ),
+    'trace-coverage': (
+      <TraceCoveragePanel
+        summary={traceCoverage.summary}
+        untracedFiles={traceCoverage.untraced}
+        staleFiles={traceCoverage.stale}
+        ignoredFiles={traceCoverage.ignored}
+        building={traceCoverage.building}
+        loading={traceCoverage.loading}
+        onTraceAll={handleTraceAll}
+        onRetraceStale={handleRetraceStale}
+        onAddIgnorePattern={handleAddIgnorePattern}
+        onRemoveIgnorePattern={handleRemoveIgnorePattern}
+        onRefresh={fetchTraceCoverage}
+      />
+    ),
   }), [
-    projectStatus, isBuilding, selectedProject, selectedProjectId, rootNames, pinnedPaths, pinnedFiles,
+    projectStatus, isBuilding, selectedProject, selectedProjectId, fileTree, pinnedPaths, pinnedFiles,
     watchStatus, watchLoading, handleStartWatch, handleStopWatch,
     query, searchK, minScore, searchLoading, searchResults, selectedChunk,
     contextK, contextMaxChars, contextIncludeSources, contextIncludeScores, contextStructured, context, contextMeta,
-    projectConfig, configDirty,
+    projectConfig, configDirty, traceStatus, traceCoverage,
     handleBuild, handleSearch, handleGetContext, handleCopyContext, handleSaveConfig, handleProjectConfigChange,
-    handlePinFile, handleUnpinFile,
+    handlePinFile, handleUnpinFile, pathWeights, handlePathWeightChange,
+    handleSearchTrace, handleGetTraceNode, handleGetTraceNeighbors, handleBuildTrace, handleEnableTrace,
+    handleTraceAll, handleRetraceStale, handleAddIgnorePattern, handleRemoveIgnorePattern, fetchTraceCoverage,
   ])
 
   // ── Dynamic panel definitions for pinned files ──────────────
@@ -900,17 +1141,19 @@ function App() {
     ),
     roots: (
       <FileExplorerDetail
-        treeData={rootNames.map((name): TreeNode => ({ name, type: 'folder', children: [] }))}
+        treeData={fileTree}
         pinnedPaths={pinnedPaths}
         onPinFile={handlePinFile}
         onUnpinFile={handleUnpinFile}
         onLoadFileContent={handleLoadFileContent}
+        pathWeights={pathWeights}
+        onWeightChange={handlePathWeightChange}
       />
     ),
   }), [
     llmConfig, handleLLMConfigChange, handleAddEndpoint, handleEditEndpoint, handleDeleteEndpoint,
     handleTestEndpoint, handleFetchModels, handleTestModel, availableModels, loadingModels, testingSlot, testResults,
-    rootNames, pinnedPaths, handlePinFile, handleUnpinFile, handleLoadFileContent,
+    fileTree, pinnedPaths, handlePinFile, handleUnpinFile, handleLoadFileContent, pathWeights, handlePathWeightChange,
   ])
 
   // ── Loading state ──────────────────────────────────────────
@@ -922,7 +1165,35 @@ function App() {
   return (
     <>
       <ConnectivityStatus />
-      <DebugPanel />
+      <DevSettingsPanel
+        open={devSettingsOpen}
+        onClose={() => setDevSettingsOpen(false)}
+        uiMode={uiMode}
+        onModeChange={setUiMode}
+        uiTheme={uiTheme}
+        onThemeChange={setUiTheme}
+        bgImage={bgImage}
+        onBgImageChange={setBgImage}
+      />
+      {/* Floating Dev Settings trigger — always visible */}
+      {!devSettingsOpen && (
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setDevSettingsOpen(true)}
+          title="Dev Settings"
+          className="fixed bottom-4 right-4 z-40 shadow-lg bg-surface hover:bg-surface-raised"
+        >
+          <Settings className="w-5 h-5" />
+        </Button>
+      )}
+      {/* Background image overlay */}
+      {bgImage && (
+        <div
+          className="fixed inset-0 z-[-1] bg-cover bg-center opacity-10 pointer-events-none"
+          style={{ backgroundImage: `url(${bgImage})` }}
+        />
+      )}
       <AppShell
         sidebar={
           <Sidebar
@@ -935,6 +1206,19 @@ function App() {
                 selectedProjectId={selectedProjectId ?? undefined}
                 onProjectSelect={setSelectedProjectId}
                 onAddProject={() => setAddModalOpen(true)}
+                extraActions={
+                  dashboardLayout && layoutApiRef.current ? (
+                    <PanelPicker
+                      layout={dashboardLayout}
+                      panelDefinitions={allPanelDefs}
+                      onTogglePanel={layoutApiRef.current.togglePanelVisibility}
+                      onResetLayout={layoutApiRef.current.resetLayout}
+                      onRefitLayout={layoutApiRef.current.reflowLayout}
+                      onCopyLayout={layoutApiRef.current.copyLayout}
+                      onPasteLayout={layoutApiRef.current.pasteLayout}
+                    />
+                  ) : undefined
+                }
               />
             )}
           </Sidebar>
@@ -948,49 +1232,31 @@ function App() {
               panelDetails={panelDetails}
               onPanelClose={handlePanelClose}
               onLayoutReady={(api) => { layoutApiRef.current = api }}
+              onLayoutChange={setDashboardLayout}
+              hidePanelPicker
               headerLeft={
                 <h1 className="text-2xl font-bold flex items-center gap-2 text-text">
                   {selectedProject.name}
                 </h1>
               }
               headerRight={
-                <div className="flex items-center gap-2">
-                  <Select
-                    value={uiMode}
-                    onChange={(e) => setUiMode(e.target.value as 'light' | 'dark')}
-                    aria-label="Mode"
-                    size="sm"
-                    options={MODE_OPTIONS}
-                  />
-                  <Select
-                    value={uiTheme}
-                    onChange={(e) => setUiTheme(e.target.value)}
-                    aria-label="Visual Style"
-                    size="sm"
-                    options={THEME_OPTIONS}
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => selectedProjectId && void refreshStatus(selectedProjectId)}
-                    title="Refresh"
-                  >
-                    <RefreshCw className="w-5 h-5" />
-                  </Button>
-                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => selectedProjectId && void refreshStatus(selectedProjectId)}
+                  title="Refresh"
+                >
+                  <RefreshCw className="w-5 h-5" />
+                </Button>
               }
             />
           </div>
         ) : (
           <EmptyState
-            icon={FileText}
+            icon={<FileText />}
             title="No Project Selected"
             description="Select a project from the sidebar or create a new one to get started."
-            action={
-              <Button onClick={() => setAddModalOpen(true)}>
-                Add Project
-              </Button>
-            }
+            action={{ label: 'Add Project', onClick: () => setAddModalOpen(true) }}
           />
         )}
       </AppShell>

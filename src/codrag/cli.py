@@ -471,6 +471,34 @@ def context(
     console.print(ctx)
 
 
+@app.command("models")
+def models_download() -> None:
+    """Download the native embedding model for offline/air-gapped use.
+
+    Pre-downloads nomic-embed-text-v1.5 (ONNX, ~100 MB quantized) to the
+    HuggingFace cache (~/.cache/huggingface/).  After downloading, CoDRAG
+    can run semantic search without Ollama or any network access.
+    """
+    from codrag.core.embedder import NativeEmbedder
+
+    native = NativeEmbedder()
+    if not native.is_available():
+        console.print("[red]Error: Native embedder dependencies not installed.[/red]")
+        console.print("[dim]Run: pip install onnxruntime tokenizers huggingface-hub[/dim]")
+        raise typer.Exit(1)
+
+    console.print(f"[cyan]Downloading model: {NativeEmbedder.HF_REPO_ID}[/cyan]")
+    console.print(f"[dim]Files: {NativeEmbedder.TOKENIZER_FILE}, {NativeEmbedder.ONNX_FILE}[/dim]")
+
+    try:
+        model_path = native.download_model()
+        console.print(f"[green]✓ Model downloaded to: {model_path}[/green]")
+        console.print("[dim]CoDRAG will now use native embeddings by default (no Ollama needed).[/dim]")
+    except Exception as e:
+        console.print(f"[red]Download failed: {e}[/red]")
+        raise typer.Exit(1)
+
+
 @app.command()
 def ui(
     port: int = typer.Option(8400, "--port", "-p", help="Dashboard port"),

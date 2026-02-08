@@ -171,6 +171,26 @@ class CodeIndex:
         cur_model = str(getattr(self.embedder, "model", "unknown"))
         can_reuse = bool(prev_docs) and prev_emb is not None and prev_model == cur_model
 
+        # Cold-start incremental: if not loaded in memory but manifest has file_hashes,
+        # load previous index from disk so we can reuse unchanged chunks.
+        if not can_reuse and prev_model == cur_model:
+            manifest_hashes = self._manifest.get("file_hashes")
+            if isinstance(manifest_hashes, dict) and manifest_hashes:
+                try:
+                    docs_path = self.index_dir / "documents.json"
+                    emb_path = self.index_dir / "embeddings.npy"
+                    if docs_path.exists() and emb_path.exists():
+                        with open(docs_path) as f:
+                            prev_docs = json.load(f)
+                        prev_emb = np.load(emb_path)
+                        can_reuse = bool(prev_docs) and prev_emb is not None
+                        logger.info("Cold-start incremental: loaded %d previous docs for reuse", len(prev_docs))
+                except Exception as e:
+                    logger.warning("Failed to load previous index for cold-start incremental: %s", e)
+                    prev_docs = []
+                    prev_emb = None
+                    can_reuse = False
+
         prev_by_source: Dict[str, List[int]] = {}
         prev_hash_by_source: Dict[str, str] = {}
         if can_reuse:
@@ -227,11 +247,21 @@ class CodeIndex:
         docs: List[Dict[str, Any]] = []
         vectors: List[List[float]] = []
         total_files = len(filtered_files)
+        current_file_hashes: Dict[str, str] = {}  # rel_path -> hash for manifest
 
         files_reused = 0
         files_embedded = 0
         chunks_reused = 0
         chunks_embedded = 0
+
+        # Count deleted files (in previous index but not in current scan)
+        current_rel_paths = set()
+        for f in filtered_files:
+            try:
+                current_rel_paths.add(str(f.relative_to(repo_root)))
+            except ValueError:
+                pass
+        files_deleted = len(set(prev_hash_by_source.keys()) - current_rel_paths) if can_reuse else 0
 
         for i, file_path in enumerate(filtered_files):
             rel_path = str(file_path.relative_to(repo_root))
@@ -246,6 +276,7 @@ class CodeIndex:
                 continue
 
             file_hash = stable_file_hash(raw)
+            current_file_hashes[rel_path] = file_hash
 
             if can_reuse:
                 prev_hash = prev_hash_by_source.get(rel_path)
@@ -306,25 +337,34 @@ class CodeIndex:
             except Exception as e:
                 logger.warning(f"FTS rebuild failed (continuing without keyword index): {e}")
 
+            build_mode = "full"
+            if files_reused > 0 and files_embedded == 0 and files_deleted == 0:
+                build_mode = "noop"  # Nothing changed
+            elif files_reused > 0:
+                build_mode = "incremental"
+
             manifest = build_manifest(
                 model=str(getattr(self.embedder, "model", "unknown")),
                 embedding_dim=int(embeddings.shape[1]),
                 roots=list(selected_roots or []),
                 count=len(docs),
                 build=ManifestBuildStats(
-                    mode="incremental" if files_reused > 0 else "full",
+                    mode=build_mode,
                     files_total=total_files,
                     files_reused=files_reused,
                     files_embedded=files_embedded,
+                    files_deleted=files_deleted,
                     chunks_total=len(docs),
                     chunks_reused=chunks_reused,
                     chunks_embedded=chunks_embedded,
                 ),
+                file_hashes=current_file_hashes,
                 config={
                     "include_globs": include_globs,
                     "exclude_globs": exclude_globs,
                     "max_file_bytes": max_file_bytes,
                     "role_weights": role_weights,
+                    "path_weights": dict(policy.get("path_weights") or {}),
                     "primer": policy.get("primer"),
                 },
                 built_at=datetime.now(timezone.utc).isoformat(),
@@ -465,6 +505,24 @@ class CodeIndex:
 
         return "default"
 
+    @staticmethod
+    def _resolve_path_weight(
+        source_path: str, path_weights: Dict[str, float]
+    ) -> float:
+        """Walk up the path hierarchy to find the most specific weight.
+
+        Exact match wins first, then longest-prefix ancestor.
+        Returns 1.0 if no match.
+        """
+        if source_path in path_weights:
+            return path_weights[source_path]
+        parts = source_path.split("/")
+        for i in range(len(parts) - 1, 0, -1):
+            parent = "/".join(parts[:i])
+            if parent in path_weights:
+                return path_weights[parent]
+        return 1.0
+
     def _intent_role_multipliers(self, intent: str) -> Dict[str, float]:
         if intent == "docs":
             return {"docs": 1.15, "code": 0.98, "tests": 0.98, "other": 0.95}
@@ -520,7 +578,8 @@ class CodeIndex:
         if not self.is_loaded():
             return []
 
-        qv = np.array(self.embedder.embed(query).vector, dtype=np.float32)
+        embed_fn = getattr(self.embedder, "embed_query", self.embedder.embed)
+        qv = np.array(embed_fn(query).vector, dtype=np.float32)
         qn = np.linalg.norm(qv)
         if qn == 0.0:
             return []
@@ -546,11 +605,15 @@ class CodeIndex:
         if not isinstance(role_weights, dict):
             role_weights = {}
 
-        if role_weights or intent_mult:
+        path_weights = (self._manifest.get("config") or {}).get("path_weights")
+        if not isinstance(path_weights, dict):
+            path_weights = {}
+
+        if role_weights or intent_mult or path_weights:
             for i, d in enumerate(docs):
+                sp = str(d.get("source_path") or "")
                 role = str(d.get("role") or "")
                 if not role:
-                    sp = str(d.get("source_path") or "")
                     role = classify_rel_path(sp) if sp else "other"
 
                 w = 1.0
@@ -566,6 +629,9 @@ class CodeIndex:
                         w *= float(mult)
                     except (TypeError, ValueError):
                         pass
+                if path_weights and sp:
+                    pw = self._resolve_path_weight(sp, path_weights)
+                    w *= pw
                 if w != 1.0:
                     sims[i] = sims[i] * w
 

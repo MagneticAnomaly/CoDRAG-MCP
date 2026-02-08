@@ -50,8 +50,9 @@ else:
     else:
         _logger.debug("Using Python engine (codrag_engine not installed)")
 
-from .embedder import Embedder, OllamaEmbedder, FakeEmbedder, EmbeddingResult
+from .embedder import Embedder, OllamaEmbedder, NativeEmbedder, FakeEmbedder, EmbeddingResult
 from .chunking import Chunk, chunk_markdown, chunk_code
+from .compressor import ContextCompressor, ClaraCompressor, NoopCompressor, CompressResult
 from .index import CodeIndex, SearchResult
 from .trace import TraceBuilder, TraceIndex, TraceNode, TraceEdge, build_trace
 
@@ -61,8 +62,13 @@ __all__ = [
     "SearchResult",
     "Embedder",
     "OllamaEmbedder",
+    "NativeEmbedder",
     "FakeEmbedder",
     "EmbeddingResult",
+    "ContextCompressor",
+    "ClaraCompressor",
+    "NoopCompressor",
+    "CompressResult",
     "Chunk",
     "chunk_markdown",
     "chunk_code",

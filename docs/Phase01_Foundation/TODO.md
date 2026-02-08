@@ -12,34 +12,30 @@
 ## Research completion checklist (P01-R*)
 These items are the Phase01-specific gates from `../PHASE_RESEARCH_GATES.md` and `../RESEARCH_BACKLOG.md`.
 
-- [p] P01-R1 Define canonical `manifest.json` schema (required fields + meaning + forward-compat plan)
-- [p] P01-R2 Define stable chunk/document ID strategy and guarantees
+- [x] P01-R1 Define canonical `manifest.json` schema (required fields + meaning + forward-compat plan) ✅
+  - `version`, `built_at`, `model`, `roots`, `count`, `embedding_dim`, `build`, `config`, `file_hashes`
+- [x] P01-R2 Define stable chunk/document ID strategy and guarantees ✅
+  - `ids.py`: `stable_sha256`, `stable_file_hash`, `stable_markdown_chunk_id`, `stable_code_chunk_id`
 - [ ] P01-R3 Define optional FTS capability detection + reporting (and fallback behavior)
-- [p] P01-R4 Define interrupted/partial build detection + deterministic recovery behavior
+- [x] P01-R4 Define interrupted/partial build detection + deterministic recovery behavior ✅
+  - Atomic build swap (temp dir → rename), stale build cleanup
 - [ ] P01-R5 Define baseline performance envelope (what repo sizes/counts are acceptable for MVP)
 
 ## Implementation backlog (P01-I*)
 - [x] P01-I1 ProjectRegistry schema + CRUD (multi-project foundations)
 - [x] P01-I2 Project storage layout (standalone default; embedded later) aligned with ADR-003
-- [ ] P01-I3 Build pipeline correctness:
-  - scan (include/exclude, max file bytes)
-  - chunk
-  - embed
-  - persist (atomic swap)
-- [ ] P01-I4 `status` surface fields required by dashboard + MCP:
-  - index exists
-  - build running
-  - last successful build timestamp
-  - last error (code/message/hint)
-- [ ] P01-I5 Search primitives:
-  - query embedding
-  - vector similarity
-  - result shaping (chunk_id, path, span, preview, score)
-- [ ] P01-I6 Context assembly primitives:
-  - citations
-  - bounded output (`max_chars`)
-  - structured output option
-- [ ] P01-I7 Error envelope parity (HTTP) with Phase02 UI expectations
+- [x] P01-I3 Build pipeline correctness 
+  - scan (include/exclude, max file bytes), chunk, embed, persist (atomic swap)
+  - Incremental rebuild with hash-based reuse + cold-start + deleted file detection
+- [x] P01-I4 `status` surface fields required by dashboard + MCP 
+  - `GET /projects/{id}/status`: index exists, build running, last build, errors
+- [x] P01-I5 Search primitives 
+  - `CodeIndex.search()`: query embedding, cosine similarity, FTS hybrid, path weights, role weights
+- [x] P01-I6 Context assembly primitives 
+  - `get_context()`, `get_context_structured()`, `get_context_with_trace_expansion()`
+  - Citations, bounded output, structured, trace expansion, CLaRa compression
+- [x] P01-I7 Error envelope parity (HTTP) with Phase02 UI expectations 
+  - `ApiException` with code/message/hint, consistent `{ok, data, error}` envelope
 - [ ] P01-I8 Ensure “last known-good snapshot” behavior: search/context remain available while builds run
 
 ### Near-term additions (unblocked, high leverage)

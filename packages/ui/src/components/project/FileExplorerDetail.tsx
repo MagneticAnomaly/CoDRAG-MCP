@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { FolderTree as FolderTreeIcon } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { FolderTree } from './FolderTree';
@@ -14,6 +14,12 @@ export interface FileExplorerDetailProps {
   onLoadFileContent?: (path: string) => Promise<string>;
   includedPaths?: Set<string>;
   onToggleInclude?: (paths: string[], action: 'add' | 'remove') => void;
+  /** Per-path weight overrides (0.0–2.0, default 1.0). */
+  pathWeights?: Record<string, number>;
+  /** Called when user changes weight. null removes the override. */
+  onWeightChange?: (path: string, weight: number | null) => void;
+  /** Initial width of the tree pane in pixels (default 384 = w-96) */
+  initialTreeWidth?: number;
   className?: string;
 }
 
@@ -25,12 +31,51 @@ export function FileExplorerDetail({
   onLoadFileContent,
   includedPaths,
   onToggleInclude,
+  pathWeights,
+  onWeightChange,
+  initialTreeWidth = 384,
   className,
 }: FileExplorerDetailProps) {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState<string | null>(null);
   const [fileLoading, setFileLoading] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
+
+  // Resizable tree pane width
+  const [treeWidth, setTreeWidth] = useState(initialTreeWidth);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef(false);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!draggingRef.current || !containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const newWidth = Math.max(200, Math.min(e.clientX - rect.left, rect.width - 200));
+      setTreeWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      if (draggingRef.current) {
+        draggingRef.current = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+
+  const handleDividerMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    draggingRef.current = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, []);
 
   const handleNodeClick = useCallback(
     async (node: TreeNode, path: string) => {
@@ -60,10 +105,31 @@ export function FileExplorerDetail({
   );
 
   return (
-    <div className={cn('h-full flex flex-col md:flex-row', className)}>
+    <div ref={containerRef} className={cn('h-full flex flex-col md:flex-row', className)}>
       {/* Tree pane */}
-      <div className="w-full md:w-80 lg:w-96 shrink-0 border-b md:border-b-0 md:border-r border-border overflow-y-auto custom-scrollbar">
-        <div className="p-4">
+      <div
+        className="shrink-0 border-b md:border-b-0 overflow-y-auto custom-scrollbar w-full md:w-auto"
+        style={{ width: undefined, minWidth: 0 }}
+      >
+        <div className="hidden md:block h-full overflow-y-auto custom-scrollbar" style={{ width: treeWidth }}>
+          <div className="p-4">
+            <h3 className="text-sm font-semibold text-text mb-3 flex items-center gap-2">
+              <FolderTreeIcon className="w-4 h-4" />
+              Project Files
+            </h3>
+            <FolderTree
+              data={treeData}
+              compact
+              includedPaths={includedPaths}
+              onToggleInclude={onToggleInclude}
+              onNodeClick={handleNodeClick}
+              pathWeights={pathWeights}
+              onWeightChange={onWeightChange}
+            />
+          </div>
+        </div>
+        {/* Mobile: full width, no resize */}
+        <div className="md:hidden p-4">
           <h3 className="text-sm font-semibold text-text mb-3 flex items-center gap-2">
             <FolderTreeIcon className="w-4 h-4" />
             Project Files
@@ -74,8 +140,19 @@ export function FileExplorerDetail({
             includedPaths={includedPaths}
             onToggleInclude={onToggleInclude}
             onNodeClick={handleNodeClick}
+            pathWeights={pathWeights}
+            onWeightChange={onWeightChange}
           />
         </div>
+      </div>
+
+      {/* Draggable divider */}
+      <div
+        className="hidden md:flex items-center justify-center w-1.5 cursor-col-resize group hover:bg-primary/10 active:bg-primary/20 transition-colors shrink-0"
+        onMouseDown={handleDividerMouseDown}
+        title="Drag to resize"
+      >
+        <div className="w-px h-full bg-border group-hover:bg-primary/40 group-active:bg-primary/60 transition-colors" />
       </div>
 
       {/* Preview pane */}

@@ -399,6 +399,10 @@ class MCPServer:
         query: str,
         k: int = 5,
         max_chars: int = 6000,
+        trace_expand: bool = False,
+        compression: str = "none",
+        compression_level: str = "standard",
+        compression_timeout_s: float = 30.0,
     ) -> Dict[str, Any]:
         """Get assembled context."""
         if not query.strip():
@@ -422,24 +426,43 @@ class MCPServer:
         if max_chars > MAX_CONTEXT_CHARS:
             raise InvalidParamsError(f"max_chars too large (max {MAX_CONTEXT_CHARS})")
 
+        if compression not in ("none", "clara"):
+            raise InvalidParamsError("compression must be 'none' or 'clara'")
+        if compression_level not in ("light", "standard", "aggressive"):
+            raise InvalidParamsError("compression_level must be 'light', 'standard', or 'aggressive'")
+
         project_id = await self._resolve_project_id()
-        data = await self._api_post(f"/projects/{project_id}/context", {
+        payload: Dict[str, Any] = {
             "query": query,
             "k": k,
             "max_chars": max_chars,
             "include_sources": True,
             "include_scores": False,
             "structured": True,
-        })
+        }
+        if trace_expand:
+            payload["trace_expand"] = True
+        if compression != "none":
+            payload["compression"] = compression
+            payload["compression_level"] = compression_level
+            payload["compression_timeout_s"] = float(compression_timeout_s)
+
+        data = await self._api_post(f"/projects/{project_id}/context", payload)
 
         chunks = data.get("chunks") if isinstance(data, dict) else None
         chunks_used = len(chunks) if isinstance(chunks, list) else 0
-        return {
+        result: Dict[str, Any] = {
             "context": (data or {}).get("context", "") if isinstance(data, dict) else "",
             "chunks_used": chunks_used,
             "total_chars": (data or {}).get("total_chars", 0) if isinstance(data, dict) else 0,
             "estimated_tokens": (data or {}).get("estimated_tokens", 0) if isinstance(data, dict) else 0,
         }
+
+        comp_meta = (data or {}).get("compression") if isinstance(data, dict) else None
+        if comp_meta:
+            result["compression"] = comp_meta
+
+        return result
 
     # -------------------------------------------------------------------------
     # MCP Protocol Handlers
@@ -483,6 +506,10 @@ class MCPServer:
                     query=args.get("query", ""),
                     k=args.get("k", 5),
                     max_chars=args.get("max_chars", 6000),
+                    trace_expand=bool(args.get("trace_expand", False)),
+                    compression=args.get("compression", "none"),
+                    compression_level=args.get("compression_level", "standard"),
+                    compression_timeout_s=args.get("compression_timeout_s", 30.0),
                 )
             else:
                 raise MethodNotFoundError(f"Unknown tool: {name}")

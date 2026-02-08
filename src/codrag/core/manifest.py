@@ -34,9 +34,10 @@ class ManifestBuildStats:
     files_total: int
     files_reused: int
     files_embedded: int
-    chunks_total: int
-    chunks_reused: int
-    chunks_embedded: int
+    files_deleted: int = 0
+    chunks_total: int = 0
+    chunks_reused: int = 0
+    chunks_embedded: int = 0
 
 
 def build_manifest(
@@ -47,10 +48,11 @@ def build_manifest(
     count: int,
     build: ManifestBuildStats,
     config: Dict[str, Any],
+    file_hashes: Optional[Dict[str, str]] = None,
     version: str = MANIFEST_VERSION,
     built_at: Optional[str] = None,
 ) -> Dict[str, Any]:
-    return {
+    m: Dict[str, Any] = {
         "version": version,
         "built_at": built_at or utc_now_iso(),
         "model": model,
@@ -62,9 +64,13 @@ def build_manifest(
             "files_total": int(build.files_total),
             "files_reused": int(build.files_reused),
             "files_embedded": int(build.files_embedded),
+            "files_deleted": int(build.files_deleted),
             "chunks_total": int(build.chunks_total),
             "chunks_reused": int(build.chunks_reused),
             "chunks_embedded": int(build.chunks_embedded),
         },
         "config": dict(config),
     }
+    if file_hashes is not None:
+        m["file_hashes"] = dict(file_hashes)
+    return m
