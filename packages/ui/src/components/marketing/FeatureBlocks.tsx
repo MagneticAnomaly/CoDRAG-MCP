@@ -1,7 +1,7 @@
 import { Badge, Card, Flex, Text, Title } from '@tremor/react';
 import { 
   Search, GitBranch, Zap, Lock, RefreshCw, Plug, 
-  AlertTriangle, Lightbulb, TrendingUp 
+  AlertTriangle, Lightbulb, TrendingUp, SlidersHorizontal, Shrink
 } from 'lucide-react';
 
 export interface Feature {
@@ -147,37 +147,50 @@ function BentoGrid({ features }: { features: Feature[] }) {
 export const codragFeatures: Feature[] = [
   {
     icon: <Search className="w-8 h-8" />,
-    title: 'Semantic Code Search',
-    description: 'Ask natural-language questions like "where is the auth middleware?" and get ranked results in under 100 ms—across every project you manage.',
-    badge: 'Core',
+    title: 'Semantic + Structural Search',
+    description: 'Ask "where is the auth middleware?" and get ranked results in under 100 ms. Built-in embeddings mean semantic search works out of the box — no Ollama, no API keys.',
+    badge: 'Built-in',
     highlight: true,
   },
   {
     icon: <GitBranch className="w-8 h-8" />,
     title: 'Structural Trace Index',
-    description: 'Goes beyond vector search. A Rust-powered engine maps imports, call graphs, and symbol hierarchies so your AI sees how code connects—not just where keywords appear.',
+    description: 'Goes beyond vector search. A Rust-powered engine maps imports, call graphs, and symbol hierarchies across your entire monorepo — so your AI sees how 100k files connect.',
     badge: 'Pro',
     highlight: true,
   },
   {
     icon: <Zap className="w-8 h-8" />,
     title: 'Instant Context Assembly',
-    description: 'One command assembles perfectly chunked, citation-rich context for any LLM. No more copy-pasting files or guessing what to include.',
+    description: 'One call assembles citation-rich context for any LLM. Budget-aware chunking fits the right code into your prompt window — even for massive codebases and sprawling doc trees.',
+  },
+  {
+    icon: <SlidersHorizontal className="w-8 h-8" />,
+    title: 'Path Weights — You Steer the Signal',
+    description: 'Boost src/core/ to 1.5× so your domain logic always surfaces first. Set vendor/ to zero to silence noise. Hierarchical, instant, no rebuild required.',
+    badge: 'New',
+    highlight: true,
+  },
+  {
+    icon: <Shrink className="w-8 h-8" />,
+    title: '10–16× Context Compression',
+    description: 'CLaRa compresses retrieved context before it reaches your LLM — fitting more relevant signal into your prompt window. Query-aware, best-effort, runs locally.',
+    badge: 'CLaRa',
   },
   {
     icon: <Lock className="w-8 h-8" />,
     title: 'Runs 100% on Your Machine',
-    description: 'Your code never leaves localhost. No cloud upload, no telemetry. CoDRAG\'s trace index works without any LLM — optionally add Ollama or your own cloud API for semantic embeddings.',
+    description: 'Your code never leaves localhost. No cloud upload, no telemetry. Embeddings, search, and compression all run locally — zero network traffic by default.',
   },
   {
     icon: <RefreshCw className="w-8 h-8" />,
     title: 'Always-Fresh Index',
-    description: 'A real-time file watcher detects edits and rebuilds incrementally in Rust — so your search results and AI context are never stale.',
+    description: 'A real-time file watcher detects edits and rebuilds incrementally in Rust — so your search results and AI context are never stale, even across thousands of files.',
   },
   {
     icon: <Plug className="w-8 h-8" />,
     title: 'Works With Every AI Tool',
-    description: 'Native MCP integration means CoDRAG plugs directly into Cursor, Windsurf, VS Code, and Claude Desktop—no config gymnastics.',
+    description: 'Native MCP integration means CoDRAG plugs directly into Cursor, Windsurf, VS Code, and Claude Desktop — no config gymnastics.',
     badge: 'MCP',
   },
 ];
@@ -185,18 +198,18 @@ export const codragFeatures: Feature[] = [
 export const marketingFeatures: Feature[] = [
   {
     icon: <AlertTriangle className="w-8 h-8" />,
-    title: 'The Problem: AI Sees Files, Not Structure',
-    description: 'AI coding tools already index your repo — but they grab files without understanding how code connects. You waste time re-explaining architecture, correcting wrong assumptions, and pasting missing context.',
+    title: 'The Problem: Large Codebases Break AI Context',
+    description: 'Monorepos with 100k files. Thousands of markdown docs. AI tools grab random files without understanding how code connects — and their context windows overflow with noise. You waste time re-explaining architecture and pasting missing context.',
     highlight: true,
   },
   {
     icon: <Lightbulb className="w-8 h-8" />,
-    title: 'The Fix: Give AI a Structural Map',
-    description: 'CoDRAG\'s Rust-powered engine indexes your entire codebase—semantics, symbols, and call graphs—then assembles exactly the right context for every prompt, automatically.',
+    title: 'The Fix: Index Everything, Control What Surfaces',
+    description: 'CoDRAG\'s Rust engine indexes your entire codebase — semantics, symbols, and call graphs — then you steer what matters with path weights. Boost core modules, suppress vendor noise, compress the rest with CLaRa. Every prompt gets exactly the right context, automatically.',
   },
   {
     icon: <TrendingUp className="w-8 h-8" />,
-    title: 'The Result: AI That Actually Gets It',
-    description: 'More relevant suggestions, fewer corrections, faster iteration. Developers using structured context report dramatically better AI output across Cursor, Windsurf, and Claude Desktop.',
+    title: 'The Result: AI That Understands Your Architecture',
+    description: 'More relevant suggestions, fewer corrections, faster iteration — even on the largest codebases and doc trees. Built-in embeddings, structural tracing, path weights, and 10–16× compression work together so your AI finally sees the whole picture.',
   },
 ];

@@ -18,7 +18,10 @@ export type {
   ProjectStatus,
   WatchStatus,
   WatchState,
-  ApiError
+  ApiError,
+  TraceCoverageFile,
+  TraceCoverageSummary,
+  TraceCoverage,
 } from './types';
 
 // Components - Status
@@ -63,13 +66,17 @@ export type { FolderTreeProps, TreeNode, FileStatus, ProjectSettingsPanelProps, 
 export { WatchStatusIndicator, WatchControlPanel } from './components/watch';
 export type { WatchStatusIndicatorProps, WatchControlPanelProps } from './components/watch';
 
+// Components - Trace (Phase 04)
+export { TraceStatusCard, TraceExplorer, TraceCoveragePanel } from './components/trace';
+export type { TraceStatusCardProps, TraceExplorerProps, TraceCoveragePanelProps } from './components/trace';
+
 // Components - Layout (Modular Dashboard - Phase 15)
 export { PanelChrome, DashboardGrid, PanelPicker, ModularDashboard, useLayoutPersistence } from './components/layout';
 export type { PanelChromeProps, DashboardGridProps, PanelPickerProps, ModularDashboardProps, PanelContentMap, DashboardLayoutApi } from './components/layout';
 
 // Components - Marketing & Site (Phase 12)
-export { MarketingHero, FeatureBlocks, codragFeatures, marketingFeatures } from './components/marketing';
-export type { MarketingHeroProps, FeatureBlocksProps, Feature } from './components/marketing';
+export { MarketingHero, FeatureBlocks, codragFeatures, marketingFeatures, TierComparison, tierComparisonFeatures, TechStackMatrix, techStackComponents } from './components/marketing';
+export type { MarketingHeroProps, FeatureBlocksProps, Feature, TierComparisonProps, TierFeature, TechStackMatrixProps, StackComponent } from './components/marketing';
 export { SiteHeader, SiteFooter } from './components/site';
 export type { SiteHeaderProps, SiteFooterProps, NavLink, FooterSection, FooterLink } from './components/site';
 

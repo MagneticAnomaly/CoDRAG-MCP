@@ -1,6 +1,6 @@
 "use client";
 
-import { MarketingHero, FeatureBlocks, codragFeatures, marketingFeatures } from '@codrag/ui';
+import { MarketingHero, FeatureBlocks, codragFeatures, marketingFeatures, TierComparison, TechStackMatrix } from '@codrag/ui';
 import { Terminal, ArrowRight } from 'lucide-react';
 import { DevMarketingHero } from './DevMarketingHero';
 
@@ -32,10 +32,10 @@ export default function Page() {
           <div className="text-center mb-16">
             <p className="text-sm font-semibold uppercase tracking-widest text-primary mb-3">Capabilities</p>
             <h2 className="text-3xl font-bold tracking-tight text-text sm:text-4xl">
-              The structural layer your AI tools don't have
+              Built for large codebases and sprawling doc trees
             </h2>
             <p className="mt-4 text-lg text-text-muted max-w-2xl mx-auto">
-              Semantic search, Rust-powered structural code understanding, and instant context assembly — running locally, integrated with every major AI coding tool.
+              Built-in embeddings, Rust-powered structural tracing, path weights for fine-grained control, and optional 10&ndash;16&times; compression &mdash; running locally, integrated with every major AI coding tool.
             </p>
           </div>
           <FeatureBlocks features={codragFeatures} variant="cards" />
@@ -65,6 +65,34 @@ export default function Page() {
           </div>
         </section>
 
+        {/* What You Need — Tech Stack */}
+        <section>
+          <div className="text-center mb-16">
+            <p className="text-sm font-semibold uppercase tracking-widest text-primary mb-3">What you need</p>
+            <h2 className="text-3xl font-bold tracking-tight text-text sm:text-4xl">
+              One install. Batteries included.
+            </h2>
+            <p className="mt-4 text-lg text-text-muted max-w-2xl mx-auto">
+              CoDRAG ships with built-in embeddings &mdash; semantic search, structural tracing, and context assembly work from a single install. Add CLaRa when you need to compress massive context payloads.
+            </p>
+          </div>
+          <TechStackMatrix />
+        </section>
+
+        {/* Free vs Pro */}
+        <section>
+          <div className="text-center mb-16">
+            <p className="text-sm font-semibold uppercase tracking-widest text-primary mb-3">Plans</p>
+            <h2 className="text-3xl font-bold tracking-tight text-text sm:text-4xl">
+              Free to start. Pro when you're ready.
+            </h2>
+            <p className="mt-4 text-lg text-text-muted max-w-2xl mx-auto">
+              Start with one project for free. Upgrade to Pro for unlimited projects, the structural Trace Index, and a perpetual license.
+            </p>
+          </div>
+          <TierComparison />
+        </section>
+
         {/* Trust / social proof strip */}
         <section className="text-center space-y-8">
           <h2 className="text-2xl font-bold tracking-tight text-text sm:text-3xl">
@@ -80,8 +108,8 @@ export default function Page() {
               <div className="text-sm text-text-muted mt-1">Sent to the cloud</div>
             </div>
             <div>
-              <div className="text-3xl font-bold text-primary">No LLM</div>
-              <div className="text-sm text-text-muted mt-1">Required — Ollama optional</div>
+              <div className="text-3xl font-bold text-primary">10&ndash;16&times;</div>
+              <div className="text-sm text-text-muted mt-1">Context compression with CLaRa</div>
             </div>
             <div>
               <div className="text-3xl font-bold text-primary">Perpetual</div>
