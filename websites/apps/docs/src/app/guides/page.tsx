@@ -24,6 +24,17 @@ export default function Page() {
           </a>
 
           <a
+            href="/guides/models"
+            className="block rounded-lg border border-border bg-surface p-6 hover:border-primary transition-colors"
+          >
+            <h2 className="text-xl font-semibold">Model Configuration</h2>
+            <p className="mt-2 text-sm text-text-muted">
+              Configure local LLMs for analysis, reasoning, and compression. Learn about the
+              recommended Ministral 3 stack and model slots.
+            </p>
+          </a>
+
+          <a
             href="/guides/clara"
             className="block rounded-lg border border-border bg-surface p-6 hover:border-primary transition-colors"
           >

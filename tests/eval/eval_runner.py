@@ -149,7 +149,7 @@ def run_evaluation(
     try:
         embedder = OllamaEmbedder()
         # Quick connectivity check
-        embedder.encode(["test"])
+        embedder.embed("test")
     except Exception:
         print("Warning: Ollama not available, using FakeEmbedder (results will be random)")
         embedder = FakeEmbedder()

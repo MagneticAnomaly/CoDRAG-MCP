@@ -173,6 +173,10 @@ export interface TraceStatus {
   counts: { nodes: number; edges: number };
   last_build_at: string | null;
   last_error: string | null;
+  /** Which engine is active: 'rust' or 'python' */
+  engine?: string;
+  /** Languages the engine can parse (e.g. python, typescript, go, rust, java, c, cpp) */
+  supported_languages?: string[];
 }
 
 /**
@@ -263,7 +267,7 @@ export type ServerMode = 'local' | 'remote';
 /**
  * License tier
  */
-export type LicenseTier = 'free' | 'pro' | 'team' | 'enterprise';
+export type LicenseTier = 'free' | 'starter' | 'pro' | 'team' | 'enterprise';
 
 /**
  * Team config status
@@ -293,7 +297,7 @@ export interface LLMStatus {
 /**
  * Provider types for LLM endpoints
  */
-export type LLMProvider = 'ollama' | 'openai' | 'openai-compatible' | 'anthropic';
+export type LLMProvider = 'ollama' | 'openai' | 'openai-compatible' | 'anthropic' | 'clara';
 
 /**
  * Model source for embedding/CLaRa
@@ -347,6 +351,7 @@ export interface ClaraConfig {
   hf_download_progress?: number;
   // Remote mode
   remote_url?: string;
+  endpoint_id?: string;
 }
 
 /**
@@ -377,12 +382,32 @@ export interface HFDownloadStatus {
 }
 
 /**
+ * Model readiness status from the backend.
+ * Ollama models can be: not_found (not downloaded), downloaded (on disk
+ * but not in VRAM), loading (being loaded into memory), ready (serving),
+ * or error (provider unreachable).
+ */
+export type ModelReadinessStatus = 'not_found' | 'downloaded' | 'loading' | 'ready' | 'error' | 'unknown';
+
+/**
+ * Result from the /api/llm/model-status endpoint
+ */
+export interface ModelStatusResult {
+  status: ModelReadinessStatus;
+  message: string;
+  model: string;
+  provider: string;
+  details?: Record<string, unknown>;
+}
+
+/**
  * Endpoint test result
  */
 export interface EndpointTestResult {
   success: boolean;
   message: string;
   models?: string[];
+  model_status?: ModelReadinessStatus;
 }
 
 /**
@@ -423,6 +448,8 @@ export interface ProjectConfig {
   include_globs: string[];
   exclude_globs: string[];
   max_file_bytes: number;
+  hard_limit_bytes?: number;
+  use_gitignore: boolean;
   trace: { enabled: boolean };
   auto_rebuild: { enabled: boolean; debounce_ms?: number };
 }
@@ -441,6 +468,26 @@ export interface Project {
 }
 
 /**
+ * Build statistics from the last index operation
+ */
+export interface IndexBuildStats {
+  mode: string;
+  files_total: number;
+  files_reused: number;
+  files_embedded: number;
+  files_deleted: number;
+  chunks_total: number;
+  chunks_reused: number;
+  chunks_embedded: number;
+  lines_scanned?: number;
+  lines_indexed?: number;
+  files_docs?: number;
+  files_code?: number;
+  lines_docs?: number;
+  lines_code?: number;
+}
+
+/**
  * Index status from API
  */
 export interface IndexStatus {
@@ -450,6 +497,7 @@ export interface IndexStatus {
   embedding_model?: string;
   last_build_at: string | null;
   last_error: ApiError | null;
+  build?: IndexBuildStats;
 }
 
 /**
@@ -464,6 +512,56 @@ export interface ProjectStatus {
 }
 
 /**
+ * Global UI configuration
+ */
+export interface GlobalConfig {
+  repo_root?: string;
+  core_roots?: string[];
+  working_roots?: string[];
+  include_globs?: string[];
+  exclude_globs?: string[];
+  max_file_bytes?: number;
+  hard_limit_bytes?: number;
+  use_gitignore?: boolean;
+  trace?: { enabled: boolean };
+  auto_rebuild?: { enabled: boolean; debounce_ms?: number };
+  llm_config?: LLMConfig;
+}
+
+/**
+ * Feature availability from /license endpoint
+ */
+export interface FeatureAvailability {
+  auto_rebuild: boolean;
+  auto_trace: boolean;
+  trace_index: boolean;
+  trace_search: boolean;
+  mcp_tools: boolean;
+  mcp_trace_expand: boolean;
+  path_weights: boolean;
+  clara_compression: boolean;
+  multi_repo_agent: boolean;
+  team_config: boolean;
+  audit_log: boolean;
+  projects_max: number;
+}
+
+/**
+ * License status from /license endpoint
+ */
+export interface LicenseStatus {
+  license: {
+    tier: string;
+    valid: boolean;
+    email?: string;
+    expires_at?: string;
+    seats: number;
+    features: string[];
+  };
+  features: FeatureAvailability;
+}
+
+/**
  * API error structure
  */
 export interface ApiError {
@@ -471,4 +569,31 @@ export interface ApiError {
   message: string;
   hint?: string;
   details?: Record<string, unknown>;
+}
+
+// ============================================================
+// Phase 13 - Operational Visibility Types
+// ============================================================
+
+/**
+ * Log entry from backend event stream
+ */
+export interface LogEntry {
+  timestamp: number;
+  level: string;
+  logger: string;
+  message: string;
+  created: number;
+}
+
+/**
+ * Task progress update from backend event stream
+ */
+export interface TaskProgress {
+  task_id: string;
+  message: string;
+  current: number;
+  total: number;
+  percent: number;
+  status: 'running' | 'completed' | 'failed';
 }

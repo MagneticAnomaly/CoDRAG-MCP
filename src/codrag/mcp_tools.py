@@ -52,7 +52,7 @@ TOOLS = [
         },
     },
     {
-        "name": "codrag_context",
+        "name": "codrag",
         "description": "Get assembled context for LLM prompt injection. Returns formatted chunks optimized for token efficiency. Optionally compress context via CLaRa sidecar.",
         "inputSchema": {
             "type": "object",
@@ -95,6 +95,69 @@ TOOLS = [
                 },
             },
             "required": ["query"],
+        },
+    },
+    {
+        "name": "codrag_trace_search",
+        "description": "Search the code graph (trace index) for symbols by name. Returns matching functions, classes, modules, and other code elements with their file locations.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search query for symbol names (e.g., 'handleClick', 'UserService').",
+                },
+                "kind": {
+                    "type": "string",
+                    "description": "Filter by node kind: 'function', 'class', 'module', 'method', etc. Default: all kinds.",
+                    "enum": ["function", "class", "module", "method", "variable", "import"],
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of results. Default: 20.",
+                    "default": 20,
+                },
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "codrag_trace_neighbors",
+        "description": "Get neighboring nodes in the code graph for a given node ID. Returns imports, callers, callees, and other structural relationships.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "node_id": {
+                    "type": "string",
+                    "description": "The ID of the node to get neighbors for (from trace search results).",
+                },
+                "direction": {
+                    "type": "string",
+                    "description": "Edge direction: 'in' (callers/importers), 'out' (callees/imports), or 'both'. Default: 'both'.",
+                    "enum": ["in", "out", "both"],
+                    "default": "both",
+                },
+                "edge_kinds": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Filter by edge kinds: 'imports', 'calls', 'inherits', etc. Default: ['imports'].",
+                },
+                "max_nodes": {
+                    "type": "integer",
+                    "description": "Maximum neighbor nodes to return. Default: 25.",
+                    "default": 25,
+                },
+            },
+            "required": ["node_id"],
+        },
+    },
+    {
+        "name": "codrag_trace_coverage",
+        "description": "Get trace coverage statistics: which files are traced, untraced, stale, or ignored. Useful for understanding code graph completeness.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
         },
     },
 ]

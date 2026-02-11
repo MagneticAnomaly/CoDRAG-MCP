@@ -259,7 +259,7 @@ Need to integrate with IDEs (Windsurf, Cursor, VS Code).
 - `codrag_status`
 - `codrag_build`
 - `codrag_search`
-- `codrag_context`
+- `codrag` (context)
 - `codrag_trace`
 
 ### Future

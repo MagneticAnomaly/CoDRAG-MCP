@@ -173,20 +173,29 @@ function NeoBrutalistHero() {
         <div className="flex-1 w-full">
           <div className="border-4 border-border bg-background p-2 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
             <div className="border-b-4 border-border pb-2 mb-4 flex justify-between items-center px-2">
-              <span className="font-bold flex items-center gap-2"><Terminal className="w-4 h-4" /> TERMINAL_PREVIEW</span>
+              <span className="font-bold flex items-center gap-2"><Terminal className="w-4 h-4" /> MCP_BRIDGE_LOG</span>
               <div className="flex gap-2">
                 <div className="w-4 h-4 bg-error border-2 border-black"></div>
                 <div className="w-4 h-4 bg-warning border-2 border-black"></div>
               </div>
             </div>
             <div className="font-mono text-sm space-y-2 p-2">
-              <div className="text-success">$ codrag serve</div>
-              <div className="text-text-muted">[info] daemon started on :8400</div>
-              <div className="text-success">$ codrag add ./my-app</div>
-              <div className="text-text-muted">[info] indexing 1,245 files (semantic + trace)</div>
-              <div className="text-success">$ codrag mcp --auto</div>
-              <div className="bg-primary/20 p-2 border-2 border-primary border-dashed text-primary-dark">
-                &gt; MCP ready — Cursor, Windsurf, Claude Desktop connected
+              <div className="text-text-muted border-b border-border/50 pb-2 mb-2">
+                <span className="text-info"># ~/.codeium/windsurf/mcp_config.json</span><br/>
+                {`"codrag": { "url": "http://localhost:8400/mcp/sse", "transport": "sse" }`}
+              </div>
+              
+              <div className="text-success">$ cascade_agent --connect codrag</div>
+              <div className="text-text-muted">[mcp] tools loaded: codrag (primary), codrag_search, codrag_trace</div>
+              
+              <div className="mt-4">
+                <span className="text-primary font-bold">USER:</span> "Trace the auth flow and find where tokens expire"
+              </div>
+              
+              <div className="bg-primary/10 p-2 border-l-2 border-primary mt-2">
+                <div className="text-xs text-text-subtle mb-1">TOOL CALL: codrag(trace_expand=true)</div>
+                <span className="text-primary">&gt; Found 3 entry points in src/auth/*</span><br/>
+                <span className="text-primary">&gt; Traced 12 downstream calls (Rust Graph)</span>
               </div>
             </div>
           </div>
@@ -320,12 +329,12 @@ function RetroHero() {
 
         <div className="max-w-3xl mx-auto bg-black/50 backdrop-blur-sm border border-primary/50 p-6 rounded-lg shadow-[0_0_30px_rgba(255,0,255,0.2)]">
           <p className="text-lg text-white font-mono leading-relaxed">
-            <span className="text-success">BOOT SEQUENCE...</span><br/>
-            &gt; SEMANTIC INDEX: <span className="text-success">ONLINE</span><br/>
-            &gt; TRACE ENGINE: <span className="text-success">RUST_CORE ONLINE</span><br/>
-            &gt; CLOUD UPLOAD: <span className="text-error">BLOCKED</span><br/>
-            &gt; MCP BRIDGE: <span className="text-info">CURSOR / WINDSURF / CLAUDE</span><br/><br/>
-            <span className="animate-pulse flex items-center justify-center gap-2">_YOUR AI CAN SEE YOUR CODE NOW <Terminal className="w-4 h-4" /></span>
+            <span className="text-success">SYSTEM_INIT...</span><br/>
+            &gt; TRACE_INDEX: <span className="text-success">RUST_CORE READY (72ms)</span><br/>
+            &gt; MCP_SERVER: <span className="text-info">LISTENING ON :8400</span><br/>
+            &gt; TOOLS_LOADED: <span className="text-warning">codrag (context), search, trace</span><br/>
+            &gt; INTEGRATIONS: <span className="text-success">CURSOR=OK WINDSURF=OK CLAUDE=OK</span><br/><br/>
+            <span className="animate-pulse flex items-center justify-center gap-2">_WAITING FOR EDITOR COMMAND... <Terminal className="w-4 h-4" /></span>
           </p>
         </div>
 

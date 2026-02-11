@@ -104,7 +104,7 @@ All interfaces (HTTP API, MCP, CLI) should:
 
 ```json
 {
-  "name": "codrag_context",
+  "name": "codrag",
   "inputSchema": {
     "properties": {
       "k": {

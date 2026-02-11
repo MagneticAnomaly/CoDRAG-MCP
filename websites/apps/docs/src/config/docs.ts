@@ -1,5 +1,8 @@
 import type { DocNode } from '@codrag/ui';
 
+const isDev = process.env.NODE_ENV !== 'production';
+const MARKETING_URL = isDev ? 'http://localhost:3000' : 'https://codrag.io';
+
 export const docsSidebar: DocNode[] = [
   {
     title: 'Getting Started',
@@ -43,6 +46,7 @@ export const docsSidebar: DocNode[] = [
     children: [
       { title: 'Overview', href: '/guides' },
       { title: 'Built-in Embeddings', href: '/guides/embeddings' },
+      { title: 'Model Configuration', href: '/guides/models' },
       { title: 'Context Compression (CLaRa)', href: '/guides/clara' },
       { title: 'Path Weights', href: '/guides/path-weights' },
     ],
@@ -62,7 +66,7 @@ export const docsSidebar: DocNode[] = [
     children: [
       { title: 'Troubleshooting', href: '/troubleshooting' },
       { title: 'FAQ', href: '/faq' },
-      { title: 'Support', href: 'https://support.codrag.io' },
+      { title: 'Support', href: `${MARKETING_URL}/support` },
     ],
   },
 ];

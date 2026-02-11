@@ -73,6 +73,7 @@ export function PanelPicker({
       <Button
         onClick={() => setOpen(!open)}
         variant="outline"
+        size="sm"
         aria-expanded={open}
         aria-haspopup="true"
         icon={Plus}
@@ -108,6 +109,7 @@ export function PanelPicker({
                     key={def.id}
                     onClick={() => handleToggle(def.id)}
                     variant="ghost"
+                    title={def.description}
                     className={cn(
                       'w-full justify-start rounded-none h-auto py-2 px-3',
                       isVisible ? 'text-text' : 'text-text-muted'

@@ -2,6 +2,7 @@ import { Copy, Settings2 } from 'lucide-react';
 import { Card, Title, Text, Flex, Switch } from '@tremor/react';
 import { Button } from '../primitives/Button';
 import { StepperNumberInput } from '../primitives/StepperNumberInput';
+import { InfoTooltip } from '../primitives/InfoTooltip';
 import { cn } from '../../lib/utils';
 
 export interface ContextOptionsPanelProps {
@@ -60,7 +61,7 @@ export function ContextOptionsPanel({
         <div className="flex flex-wrap justify-between items-center mb-4 gap-2">
           <div className="flex items-center gap-2">
             <Settings2 className="w-5 h-5 text-primary shrink-0" />
-            <Title className="text-text truncate">Context Options</Title>
+            <Title className="text-text truncate">Context Assembler</Title>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <Button
@@ -69,7 +70,7 @@ export function ContextOptionsPanel({
               disabled={disabled}
               className="whitespace-nowrap"
             >
-              Get Context
+              Assemble
             </Button>
             {onCopyContext && (
               <Button
@@ -90,16 +91,22 @@ export function ContextOptionsPanel({
       <div className="space-y-6">
         <div className="flex flex-wrap gap-4">
           <div className="flex-1 min-w-[12rem]">
-            <label className="block text-sm font-medium text-text-muted mb-2">
-              Chunks (k)
-            </label>
+            <div className="flex items-center gap-2 mb-2">
+              <label className="block text-sm font-medium text-text-muted">
+                Chunks (k)
+              </label>
+              <InfoTooltip content="Number of retrieval chunks to include in the final prompt context." />
+            </div>
             <StepperNumberInput value={k} onValueChange={onKChange} min={1} max={50} disabled={disabled} />
           </div>
 
           <div className="flex-1 min-w-[12rem]">
-            <label className="block text-sm font-medium text-text-muted mb-2">
-              Max Chars
-            </label>
+            <div className="flex items-center gap-2 mb-2">
+              <label className="block text-sm font-medium text-text-muted">
+                Max Chars
+              </label>
+              <InfoTooltip content="Hard limit on total characters for the context window to prevent token overflow." />
+            </div>
             <StepperNumberInput value={maxChars} onValueChange={onMaxCharsChange} min={200} max={200000} step={100} disabled={disabled} />
           </div>
         </div>
@@ -107,9 +114,12 @@ export function ContextOptionsPanel({
         <div className="border-t border-border" />
 
         <div className="space-y-3">
-          <label className="block text-sm font-medium text-text-muted">
-            Inclusions
-          </label>
+          <div className="flex items-center gap-2">
+            <label className="block text-sm font-medium text-text-muted">
+              Inclusions
+            </label>
+            <InfoTooltip content="Toggle what metadata is appended to each code chunk in the prompt." />
+          </div>
           <Flex className="gap-6 w-auto" justifyContent="start">
             <label className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
               <Switch

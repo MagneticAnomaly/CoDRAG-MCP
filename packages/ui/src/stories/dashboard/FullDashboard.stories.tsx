@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState, useMemo, useCallback, useRef } from 'react';
-import { Database, RefreshCw, Network, Settings, FileText } from 'lucide-react';
-import { Badge } from '@tremor/react';
+import { Database, RefreshCw, Settings, FileText } from 'lucide-react';
 import { IndexStatusCard } from '../../components/dashboard/IndexStatusCard';
 import { BuildCard } from '../../components/dashboard/BuildCard';
 import { LLMStatusWidget, type LLMServiceStatus } from '../../components/dashboard/index';
@@ -15,14 +14,15 @@ import { sampleFileTree } from '../../components/project/index';
 import { FolderTreePanel } from '../../components/project/FolderTreePanel';
 import { FileExplorerDetail } from '../../components/project/FileExplorerDetail';
 import type { PinnedTextFile } from '../../components/project/PinnedTextFilesPanel';
-import { TraceGraph, TraceGraphMini, SymbolSearchInput, type TraceNode } from '../../components/trace/index';
+import { TraceGraph, SymbolSearchInput, type TraceNode } from '../../components/trace/index';
 import { TraceCoveragePanel } from '../../components/trace/TraceCoveragePanel';
 import type { TraceCoverageFile, TraceCoverageSummary } from '../../types';
 import { ModularDashboard, type DashboardLayoutApi } from '../../components/layout/ModularDashboard';
 import type { PanelDefinition } from '../../types/layout';
 import { ProjectSettingsPanel } from '../../components/project/ProjectSettingsPanel';
 import { WatchControlPanel } from '../../components/watch/WatchControlPanel';
-import { CopyButton } from '../../components/context/CopyButton';
+import { CodeViewer } from '../../components/project/CodeViewer';
+import { UsageGuidePanel } from '../../components/dashboard/UsageGuidePanel';
 
 const meta: Meta = {
   title: 'Dashboard/Layouts/FullDashboard',
@@ -113,11 +113,9 @@ const mockCoverageSummary: TraceCoverageSummary = {
 
 import { PANEL_REGISTRY } from '../../config/panelRegistry';
 
-// Define panels for the story by extending the registry
+// Use the canonical panel registry — no extra panels needed
 const STORY_PANELS: PanelDefinition[] = [
   ...PANEL_REGISTRY,
-  { id: 'trace-mini', title: 'Trace Index', icon: Network, minHeight: 6, defaultHeight: 8, category: 'status', closeable: true, resizable: false },
-  { id: 'trace-explorer', title: 'Symbol Explorer', icon: Network, minHeight: 8, defaultHeight: 12, category: 'search', closeable: true },
 ];
 
 /** Prefix for dynamically-pinned file panel IDs */
@@ -247,6 +245,9 @@ export const FullDashboard: StoryObj = {
     };
 
     const panelContent = useMemo(() => ({
+      'usage-guide': (
+        <UsageGuidePanel bare />
+      ),
       status: (
         <IndexStatusCard
           stats={{
@@ -359,22 +360,21 @@ export const FullDashboard: StoryObj = {
         pinnedFiles.map((f) => [
           `${PINNED_PREFIX}${f.path}`,
           <div key={f.path} className="h-full flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between gap-2 px-1 py-1 border-b border-border shrink-0">
-              <span className="text-xs font-mono text-text-muted truncate flex-1">{f.path}</span>
-              <CopyButton text={f.content} label="Copy" />
-            </div>
-            <pre className="flex-1 min-h-0 p-3 text-xs whitespace-pre-wrap font-mono text-text overflow-y-auto custom-scrollbar">
-              {f.content}
-            </pre>
+            <CodeViewer 
+              content={f.content} 
+              path={f.path}
+              className="h-full border-0 rounded-none"
+            />
           </div>,
         ])
       ),
       settings: (
         <ProjectSettingsPanel
           config={{
-            include_globs: ['**/*.ts'],
-            exclude_globs: ['**/node_modules/**'],
-            max_file_bytes: 1024,
+            include_globs: ['**/*.ts', '**/*.tsx'],
+            exclude_globs: ['node_modules/**', 'dist/**'],
+            max_file_bytes: 500000,
+            use_gitignore: true,
             trace: { enabled: true },
             auto_rebuild: { enabled: false }
           }}
@@ -392,15 +392,7 @@ export const FullDashboard: StoryObj = {
           bare
         />
       ),
-      'trace-mini': (
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <Badge color="blue" size="xs">Pro</Badge>
-          </div>
-          <TraceGraphMini nodeCount={847} edgeCount={2341} />
-        </div>
-      ),
-      'trace-explorer': (
+      trace: (
         <div className="h-full flex flex-col">
           <div className="mb-4">
             <SymbolSearchInput 
@@ -416,6 +408,11 @@ export const FullDashboard: StoryObj = {
               onSelectNode={setSelectedTraceNode}
             />
           </div>
+        </div>
+      ),
+      'pinned-files': (
+        <div className="h-full overflow-y-auto space-y-2 p-2">
+          <p className="text-xs text-text-muted text-center py-4">No pinned files. Pin files from the File Tree or Knowledge Scope panels.</p>
         </div>
       ),
       'trace-coverage': (

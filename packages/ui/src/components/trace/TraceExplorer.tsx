@@ -2,6 +2,8 @@ import { useState, useCallback } from 'react';
 import { Search, GitBranch, FileCode, Box, ArrowRight, ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Button } from '../primitives/Button';
+import { ProgressIndicator } from '../status/ProgressIndicator';
+import type { TaskProgress } from '../../types';
 
 export interface TraceExplorerProps {
   /** Whether trace is enabled for this project */
@@ -10,6 +12,8 @@ export interface TraceExplorerProps {
   traceExists: boolean;
   /** Whether trace is currently building */
   traceBuilding: boolean;
+  /** Progress of current build */
+  progress?: TaskProgress;
   /** Node/edge counts */
   traceCounts: { nodes: number; edges: number };
   /** Search for symbols */
@@ -41,8 +45,15 @@ function SymbolTypeTag({ type }: { type?: string }) {
   if (!type) return null;
   const colors: Record<string, string> = {
     function: 'bg-green-500/10 text-green-600 border-green-500/20',
+    async_function: 'bg-green-500/10 text-green-600 border-green-500/20',
     class: 'bg-blue-500/10 text-blue-600 border-blue-500/20',
     method: 'bg-cyan-500/10 text-cyan-600 border-cyan-500/20',
+    async_method: 'bg-cyan-500/10 text-cyan-600 border-cyan-500/20',
+    struct: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20',
+    enum: 'bg-violet-500/10 text-violet-600 border-violet-500/20',
+    trait: 'bg-pink-500/10 text-pink-600 border-pink-500/20',
+    interface: 'bg-pink-500/10 text-pink-600 border-pink-500/20',
+    namespace: 'bg-slate-500/10 text-slate-600 border-slate-500/20',
     module: 'bg-purple-500/10 text-purple-600 border-purple-500/20',
     import: 'bg-orange-500/10 text-orange-600 border-orange-500/20',
     variable: 'bg-gray-500/10 text-gray-600 border-gray-500/20',
@@ -62,6 +73,7 @@ export function TraceExplorer({
   traceExists,
   traceBuilding,
   traceCounts,
+  progress,
   onSearchTrace,
   onGetNode,
   onGetNeighbors,
@@ -137,12 +149,12 @@ export function TraceExplorer({
     return (
       <div className={cn('flex flex-col items-center justify-center h-full text-center p-8', className)}>
         <GitBranch className="w-10 h-10 text-text-muted opacity-40 mb-4" />
-        <h3 className="text-sm font-semibold text-text mb-2">Trace Index Disabled</h3>
+        <h3 className="text-sm font-semibold text-text mb-2">Cross-Reference Disabled</h3>
         <p className="text-xs text-text-muted mb-4 max-w-xs">
-          Enable the trace index to browse symbols, imports, and call relationships in your codebase.
+          Enable the cross-reference graph to browse symbols, imports, and call relationships in your codebase.
         </p>
         {onEnableTrace && (
-          <Button size="sm" onClick={onEnableTrace}>Enable Trace</Button>
+          <Button size="sm" onClick={onEnableTrace}>Enable Map</Button>
         )}
       </div>
     );
@@ -153,11 +165,11 @@ export function TraceExplorer({
     return (
       <div className={cn('flex flex-col items-center justify-center h-full text-center p-8', className)}>
         <GitBranch className="w-10 h-10 text-text-muted opacity-40 mb-4" />
-        <h3 className="text-sm font-semibold text-text mb-2">Trace Not Built</h3>
+        <h3 className="text-sm font-semibold text-text mb-2">Cross-Ref Not Built</h3>
         <p className="text-xs text-text-muted mb-4 max-w-xs">
-          Build the trace index to explore symbols and their relationships.
+          Build the cross-reference graph to explore symbols and their relationships.
         </p>
-        <Button size="sm" onClick={onBuildTrace}>Build Trace</Button>
+        <Button size="sm" onClick={onBuildTrace}>Build Map</Button>
       </div>
     );
   }
@@ -166,9 +178,18 @@ export function TraceExplorer({
   if (traceBuilding) {
     return (
       <div className={cn('flex flex-col items-center justify-center h-full text-center p-8', className)}>
-        <Loader2 className="w-8 h-8 text-primary animate-spin mb-4" />
-        <h3 className="text-sm font-semibold text-text mb-1">Building Trace Index...</h3>
-        <p className="text-xs text-text-muted">Parsing symbols and resolving relationships</p>
+        {progress ? (
+          <div className="w-full max-w-xs space-y-4">
+            <ProgressIndicator progress={progress} />
+            <p className="text-xs text-text-muted">Parsing symbols and resolving relationships</p>
+          </div>
+        ) : (
+          <>
+            <Loader2 className="w-8 h-8 text-primary animate-spin mb-4" />
+            <h3 className="text-sm font-semibold text-text mb-1">Building Cross-Reference...</h3>
+            <p className="text-xs text-text-muted">Parsing symbols and resolving relationships</p>
+          </>
+        )}
       </div>
     );
   }
@@ -214,7 +235,7 @@ export function TraceExplorer({
           {searchResults.length === 0 && !searching && (
             <div className="flex flex-col items-center justify-center h-full text-text-muted text-xs p-6 text-center">
               <Search className="w-6 h-6 opacity-30 mb-2" />
-              <p>Search for symbols to explore the trace graph</p>
+              <p>Search for symbols to explore the cross-reference graph</p>
             </div>
           )}
           {searchResults.map((node) => {

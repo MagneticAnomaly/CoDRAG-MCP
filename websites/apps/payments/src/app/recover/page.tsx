@@ -48,7 +48,7 @@ export default function Page() {
         <h1 className="text-2xl font-bold text-text">Recover License</h1>
         <p className="mt-2 text-text-muted">
           Lost your license key? Enter the email address you used during checkout 
-          and we'll send it to you.
+          and we&apos;ll send it to you.
         </p>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-6">

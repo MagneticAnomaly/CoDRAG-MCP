@@ -18,6 +18,7 @@ const PROVIDER_OPTIONS: { value: LLMProvider; label: string }[] = [
   { value: 'openai', label: 'OpenAI' },
   { value: 'openai-compatible', label: 'OpenAI Compatible' },
   { value: 'anthropic', label: 'Anthropic (Claude)' },
+  { value: 'clara', label: 'CLaRa Server' },
 ];
 
 export function EndpointManager({

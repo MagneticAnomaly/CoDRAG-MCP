@@ -63,7 +63,7 @@ cd "$ROOT_DIR"
 
 if [[ $CHECK_PORTS -eq 1 && ( $DO_CLEAN -eq 1 || $DO_BUILD -eq 1 ) ]]; then
   BUSY=0
-  for PORT in 3000 3001 3002 3003; do
+  for PORT in 3000 3001 3003; do
     PID="$(lsof -nP -iTCP:${PORT} -sTCP:LISTEN -t 2>/dev/null | head -n 1 || true)"
     if [[ -n "${PID}" ]]; then
       CMD="$(ps -p "${PID}" -o command= 2>/dev/null | head -n 1 || true)"

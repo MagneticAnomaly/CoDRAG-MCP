@@ -3,10 +3,16 @@
 import type { ReactNode } from 'react';
 import { SiteHeader, SiteFooter } from '@codrag/ui';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
+const HOME_URL = isDev ? 'http://localhost:3000' : 'https://codrag.io';
+const PRICING_URL = isDev ? 'http://localhost:3000/pricing' : 'https://codrag.io/pricing';
+const SUPPORT_URL = isDev ? 'http://localhost:3002' : 'https://support.codrag.io';
+
 const navLinks = [
-  { label: 'Home', href: 'https://codrag.io' },
-  { label: 'Pricing', href: 'https://codrag.io/pricing' },
-  { label: 'Support', href: 'https://support.codrag.io' },
+  { label: 'Home', href: HOME_URL },
+  { label: 'Pricing', href: PRICING_URL },
+  { label: 'Support', href: SUPPORT_URL },
 ];
 
 export function ClientLayout({ children }: { children: ReactNode }) {
@@ -22,7 +28,7 @@ export function ClientLayout({ children }: { children: ReactNode }) {
       <SiteFooter 
         productName="CoDRAG"
         socials={{
-          email: 'licenses@codrag.io'
+          email: 'support@codrag.io'
         }}
       />
     </>

@@ -18,7 +18,23 @@ export default defineConfig({
       fileName: 'index',
     },
     rollupOptions: {
-      external: ['react', 'react-dom', 'react/jsx-runtime'],
+      external: [
+        'react', 
+        'react-dom', 
+        'react/jsx-runtime',
+        '@radix-ui/react-slot',
+        '@tremor/react',
+        'class-variance-authority',
+        'clsx',
+        'keyboard-css',
+        'lucide-react',
+        'react-grid-layout',
+        'react-syntax-highlighter',
+        'tailwind-merge',
+        // Also externalize subpaths often used
+        /^@radix-ui\/.*/,
+        /^react-syntax-highlighter\/.*/,
+      ],
       output: {
         globals: {
           react: 'React',

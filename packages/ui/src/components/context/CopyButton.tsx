@@ -2,11 +2,11 @@ import { useState } from 'react';
 import { cn } from '../../lib/utils';
 import { Copy, Check } from 'lucide-react';
 import { Button } from '../primitives/Button';
+import type { ButtonProps } from '../primitives/Button';
 
-export interface CopyButtonProps {
+export interface CopyButtonProps extends Omit<ButtonProps, 'onClick'> {
   text: string;
   label?: string;
-  className?: string;
 }
 
 /**
@@ -20,6 +20,9 @@ export function CopyButton({
   text,
   label = 'Copy',
   className,
+  variant = 'ghost',
+  size = 'sm',
+  ...props
 }: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
 
@@ -36,8 +39,8 @@ export function CopyButton({
   return (
     <Button
       onClick={handleCopy}
-      variant={copied ? "outline" : "ghost"}
-      size="sm"
+      variant={copied ? "outline" : variant}
+      size={size}
       className={cn(
         'text-xs font-medium transition-all',
         copied 
@@ -46,6 +49,7 @@ export function CopyButton({
         className
       )}
       icon={copied ? Check : Copy}
+      {...props}
     >
       {copied ? 'Copied!' : label}
     </Button>

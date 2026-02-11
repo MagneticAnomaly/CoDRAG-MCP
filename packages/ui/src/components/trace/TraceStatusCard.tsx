@@ -1,10 +1,24 @@
 import { Card, Badge } from '@tremor/react';
+import { Zap } from 'lucide-react';
 import { Button } from '../primitives/Button';
 import { cn } from '../../lib/utils';
-import type { TraceStatus } from '../../types';
+import { ProgressIndicator } from '../status/ProgressIndicator';
+import type { TraceStatus, TaskProgress } from '../../types';
+
+const LANG_LABELS: Record<string, string> = {
+  python: 'Python',
+  typescript: 'TS',
+  javascript: 'JS',
+  go: 'Go',
+  rust: 'Rust',
+  java: 'Java',
+  c: 'C',
+  cpp: 'C++',
+};
 
 export interface TraceStatusCardProps {
   status: TraceStatus;
+  progress?: TaskProgress;
   onEnableTrace?: () => void;
   onBuildTrace?: () => void;
   className?: string;
@@ -12,22 +26,40 @@ export interface TraceStatusCardProps {
 
 export function TraceStatusCard({
   status,
+  progress,
   onEnableTrace,
   onBuildTrace,
   className,
 }: TraceStatusCardProps) {
+  // Construct effective progress for display
+  // If building but no progress object yet, show indeterminate
+  const effectiveProgress = progress || (status.building ? {
+    task_id: 'pending_trace',
+    message: 'Building trace...',
+    current: 0,
+    total: 100,
+    percent: 0,
+    status: 'running'
+  } as TaskProgress : undefined);
+
   return (
     <Card className={cn('codrag-trace-status-card', className)}>
       <div className="space-y-6">
         <div className="flex items-start justify-between">
           <div>
-            <h3 className="text-sm font-semibold">Trace Index</h3>
+            <h3 className="text-sm font-semibold">Code Graph</h3>
             <p className="text-xs text-gray-500 mt-1">
               Structural index for symbols and imports
             </p>
           </div>
           
           <div className="flex items-center gap-2">
+            {status.engine && (
+              <Badge color={status.engine === 'rust' ? 'orange' : 'gray'}>
+                {status.engine === 'rust' && <Zap className="w-3 h-3 mr-1 inline" />}
+                {status.engine === 'rust' ? 'Rust Engine' : 'Python'}
+              </Badge>
+            )}
             {!status.enabled && (
               <Badge color="gray">Disabled</Badge>
             )}
@@ -43,6 +75,12 @@ export function TraceStatusCard({
           </div>
         </div>
 
+        {effectiveProgress && (
+          <div>
+            <ProgressIndicator progress={effectiveProgress} />
+          </div>
+        )}
+
         {status.enabled && status.exists && (
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -53,6 +91,19 @@ export function TraceStatusCard({
               <p className="text-2xl font-bold">{status.counts.edges.toLocaleString()}</p>
               <p className="text-xs text-gray-500">Edges</p>
             </div>
+          </div>
+        )}
+
+        {status.supported_languages && status.supported_languages.length > 0 && status.enabled && (
+          <div className="flex flex-wrap gap-1">
+            {status.supported_languages.map((lang) => (
+              <span
+                key={lang}
+                className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-surface-raised text-text-muted border border-border"
+              >
+                {LANG_LABELS[lang] || lang}
+              </span>
+            ))}
           </div>
         )}
 

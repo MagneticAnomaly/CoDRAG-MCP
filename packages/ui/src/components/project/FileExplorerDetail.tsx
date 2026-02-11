@@ -33,7 +33,7 @@ export function FileExplorerDetail({
   onToggleInclude,
   pathWeights,
   onWeightChange,
-  initialTreeWidth = 384,
+  initialTreeWidth = 768,
   className,
 }: FileExplorerDetailProps) {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -115,7 +115,7 @@ export function FileExplorerDetail({
           <div className="p-4">
             <h3 className="text-sm font-semibold text-text mb-3 flex items-center gap-2">
               <FolderTreeIcon className="w-4 h-4" />
-              Project Files
+              Knowledge Scope
             </h3>
             <FolderTree
               data={treeData}
@@ -132,7 +132,7 @@ export function FileExplorerDetail({
         <div className="md:hidden p-4">
           <h3 className="text-sm font-semibold text-text mb-3 flex items-center gap-2">
             <FolderTreeIcon className="w-4 h-4" />
-            Project Files
+            Knowledge Scope
           </h3>
           <FolderTree
             data={treeData}

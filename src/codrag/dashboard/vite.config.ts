@@ -87,6 +87,21 @@ export default defineConfig({
           });
         },
       },
+      '/license': {
+        target: 'http://127.0.0.1:8400',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/embedding': {
+        target: 'http://127.0.0.1:8400',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/clara': {
+        target: 'http://127.0.0.1:8400',
+        changeOrigin: true,
+        secure: false,
+      },
     },
   },
 })

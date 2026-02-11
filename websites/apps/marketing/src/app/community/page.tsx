@@ -27,7 +27,7 @@ export default function Page() {
               </span>
             </h1>
             <p className="text-xl text-text-muted leading-relaxed max-w-lg">
-              CoDRAG is built for developers, by developers. We're building the future of 
+              CoDRAG is built for developers, by developers. We&apos;re building the future of 
               structured context together.
             </p>
           </div>
@@ -92,7 +92,7 @@ export default function Page() {
               <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center mb-6 text-blue-500 text-xl">💡</div>
               <h3 className="text-xl font-bold mb-2">Workflows</h3>
               <p className="text-text-muted leading-relaxed">
-                Share your "CoDRAG Stack" — which models, prompts, and IDE setups are you using? We feature the best ones.
+                Share your &quot;CoDRAG Stack&quot; — which models, prompts, and IDE setups are you using? We feature the best ones.
               </p>
             </div>
             <div className="p-8 rounded-2xl bg-surface/50 border border-border">
@@ -107,7 +107,7 @@ export default function Page() {
 
         <div className="flex flex-wrap justify-center gap-4">
           <Button asChild variant="ghost" className="rounded-full">
-            <a href="https://support.codrag.io">Help Center</a>
+            <a href="/contact">Help Center</a>
           </Button>
           <Button asChild variant="ghost" className="rounded-full">
             <a href="/contact">Contact Team</a>

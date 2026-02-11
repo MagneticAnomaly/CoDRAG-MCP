@@ -12,12 +12,12 @@ export interface WatchStatusIndicatorProps {
 
 const stateConfig: Record<WatchState, { label: string; icon: any; classes: string }> = {
   disabled: { 
-    label: 'Watch Off', 
+    label: 'Sync Inactive', 
     icon: Eye,
     classes: 'bg-surface-raised text-text-muted border-border' 
   },
   idle: { 
-    label: 'Watching', 
+    label: 'Live Syncing', 
     icon: Clock,
     classes: 'bg-success-muted/10 text-success border-success-muted/20' 
   },
@@ -27,12 +27,12 @@ const stateConfig: Record<WatchState, { label: string; icon: any; classes: strin
     classes: 'bg-warning-muted/10 text-warning border-warning-muted/20' 
   },
   building: { 
-    label: 'Rebuilding', 
+    label: 'Indexing', 
     icon: Loader2,
     classes: 'bg-info-muted/10 text-info border-info-muted/20' 
   },
   throttled: { 
-    label: 'Throttled', 
+    label: 'Sync Paused', 
     icon: Clock,
     classes: 'bg-warning-muted/10 text-warning border-warning-muted/20' 
   },

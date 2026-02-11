@@ -32,12 +32,14 @@ export type PanelCategory = 'status' | 'search' | 'context' | 'config' | 'projec
 export interface PanelDefinition {
   id: string;
   title: string;
+  description?: string;
   icon: LucideIcon;
   minHeight: number;
   defaultHeight: number;
   category: PanelCategory;
   closeable?: boolean;  // Can be hidden (default true)
   resizable?: boolean;
+  docsUrl?: string;
 }
 
 /**
@@ -66,25 +68,153 @@ export interface GridLayoutItem {
  * Default layout configuration
  */
 export const DEFAULT_LAYOUT: DashboardLayout = {
-  version: 9,
+  version: 11,
   panels: [
-    // Top row — 4 panels across (12 cols: 2+3+3+4)
-    { id: 'status', visible: true, height: 6, collapsed: false, x: 0, y: 0, w: 2 },
-    { id: 'build', visible: true, height: 6, collapsed: false, x: 2, y: 0, w: 3 },
-    { id: 'context-options', visible: true, height: 10, collapsed: false, x: 5, y: 0, w: 3 },
-    { id: 'context-output', visible: true, height: 10, collapsed: false, x: 8, y: 0, w: 4 },
-    // Middle — tall file tree left, search + results right
-    { id: 'roots', visible: true, height: 20, collapsed: false, x: 0, y: 6, w: 5 },
-    { id: 'search', visible: true, height: 7, collapsed: false, x: 5, y: 10, w: 7 },
-    { id: 'results', visible: true, height: 10, collapsed: false, x: 5, y: 17, w: 7 },
-    // Bottom row — status + trace coverage + settings
-    { id: 'llm-status', visible: true, height: 6, collapsed: false, x: 5, y: 27, w: 3 },
-    { id: 'trace-coverage', visible: true, height: 10, collapsed: false, x: 0, y: 26, w: 5 },
-    { id: 'settings', visible: true, height: 16, collapsed: true, x: 8, y: 27, w: 4 },
-    // Hidden by default
-    { id: 'file-tree', visible: false, height: 10, collapsed: false, x: 0, y: 38, w: 4 },
-    { id: 'pinned-files', visible: false, height: 10, collapsed: false, x: 4, y: 38, w: 8 },
-  ],
+    {
+      id: "status",
+      visible: true,
+      height: 4,
+      collapsed: false,
+      x: 0,
+      y: 0,
+      w: 4
+    },
+    {
+      id: "trace-coverage",
+      visible: true,
+      height: 17,
+      collapsed: false,
+      x: 8,
+      y: 0,
+      w: 4
+    },
+    {
+      id: "usage-guide",
+      visible: true,
+      height: 6,
+      collapsed: false,
+      x: 4,
+      y: 0,
+      w: 4
+    },
+    {
+      id: "build",
+      visible: true,
+      height: 6,
+      collapsed: false,
+      x: 4,
+      y: 6,
+      w: 4
+    },
+    {
+      id: "roots",
+      visible: true,
+      height: 16,
+      collapsed: false,
+      x: 0,
+      y: 4,
+      w: 4
+    },
+    {
+      id: "context-options",
+      visible: true,
+      height: 7,
+      collapsed: false,
+      x: 4,
+      y: 6,
+      w: 4
+    },
+    {
+      id: "results",
+      visible: true,
+      height: 9,
+      collapsed: false,
+      x: 4,
+      y: 13,
+      w: 4
+    },
+    {
+      id: "trace",
+      visible: true,
+      height: 13,
+      collapsed: false,
+      x: 8,
+      y: 17,
+      w: 4
+    },
+    {
+      id: "search",
+      visible: true,
+      height: 6,
+      collapsed: false,
+      x: 0,
+      y: 20,
+      w: 4
+    },
+    {
+      id: "context-output",
+      visible: true,
+      height: 10,
+      collapsed: false,
+      x: 4,
+      y: 22,
+      w: 4
+    },
+    {
+      id: "llm-status",
+      visible: true,
+      height: 6,
+      collapsed: false,
+      x: 0,
+      y: 26,
+      w: 4
+    },
+    {
+      id: "log-console",
+      visible: true,
+      height: 6,
+      collapsed: false,
+      x: 0,
+      y: 32,
+      w: 4
+    },
+    {
+      id: "settings",
+      visible: true,
+      height: 6,
+      collapsed: true,
+      x: 8,
+      y: 30,
+      w: 4
+    },
+    {
+      id: "watch",
+      visible: false,
+      height: 4,
+      collapsed: false,
+      x: 0,
+      y: 0,
+      w: 4
+    },
+    {
+      id: "file-tree",
+      visible: false,
+      height: 10,
+      collapsed: false,
+      x: 0,
+      y: 0,
+      w: 4
+    },
+    {
+      id: "pinned-files",
+      visible: false,
+      height: 10,
+      collapsed: false,
+      x: 0,
+      y: 0,
+      w: 4
+    }
+  ]
 };
 
 /**

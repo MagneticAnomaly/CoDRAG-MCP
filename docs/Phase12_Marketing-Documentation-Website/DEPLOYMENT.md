@@ -7,7 +7,6 @@ We will deploy the four CoDRAG web applications (`marketing`, `docs`, `support`,
 - **Primary Domain**: `codrag.io` (Marketing site)
 - **Subdomains**:
   - `docs.codrag.io` (Documentation)
-  - `support.codrag.io` (Support hub)
   - `payments.codrag.io` (Licensing & checkout)
 - **Legacy Redirect**: `codrag.ai` -> `codrag.io` (via Cloudflare Page Rules)
 
@@ -17,10 +16,9 @@ We will deploy the four CoDRAG web applications (`marketing`, `docs`, `support`,
 Since all apps are built with Next.js App Router, Vercel offers the best zero-config deployment.
 
 1. **Connect GitHub Repo**: Connect `EricBintner/CoDRAG` to Vercel.
-2. **Configure Projects**: Create 4 separate Vercel projects from the same monorepo, setting the **Root Directory** for each:
+2. **Configure Projects**: Create 3 separate Vercel projects from the same monorepo, setting the **Root Directory** for each:
    - **Marketing**: `websites/apps/marketing`
    - **Docs**: `websites/apps/docs`
-   - **Support**: `websites/apps/support`
    - **Payments**: `websites/apps/payments`
 3. **Build Command**: Vercel detects Next.js automatically.
    - Override command: `cd ../../.. && npx turbo run build --filter=@codrag/marketing` (adjust filter for each app)
@@ -41,7 +39,6 @@ Good alternative, especially if using static exports (`output: 'export'`).
 | CNAME | `@` | `cname.vercel-dns.com` | Proxied | Root domain (marketing) |
 | CNAME | `www` | `codrag.io` | Proxied | WWW redirect |
 | CNAME | `docs` | `cname.vercel-dns.com` | Proxied | Docs subdomain |
-| CNAME | `support` | `cname.vercel-dns.com` | Proxied | Support subdomain |
 | CNAME | `payments` | `cname.vercel-dns.com` | Proxied | Payments subdomain |
 
 ### 2. Redirect Rules
@@ -53,6 +50,9 @@ Set these in the Vercel/Netlify dashboard for the respective projects:
 
 **Global (All Apps):**
 - `NEXT_PUBLIC_SITE_URL`: The production URL (e.g., `https://docs.codrag.io`)
+
+**Support App:**
+- `GITHUB_TOKEN`: Fine-grained Personal Access Token with read-only access to Discussions/Metadata for the repo.
 
 **Payments App:**
 - `NEXT_PUBLIC_CODRAG_CHECKOUT_URL`: Lemon Squeezy checkout URL

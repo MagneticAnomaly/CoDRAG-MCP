@@ -61,11 +61,16 @@ These items are the Phase01-specific gates from `../PHASE_RESEARCH_GATES.md` and
 
 ## Cross-phase strategy alignment
 Relevant entries in `../MASTER_TODO.md`:
-- [ ] STR-01 API envelope + error codes: confirm Phase01 shapes match `API.md`
-- [ ] STR-02 Stable IDs: confirm chunk ID derivation and document guarantees
-- [ ] STR-03 Manifest + versioning: confirm required fields + format bump policy
-- [ ] STR-04 Atomic build: document temp-dir swap + crash handling
-- [ ] STR-05 Budgets: define server-side caps for `k`, `max_chars`, `min_score`
+- [x] STR-01 API envelope + error codes: confirm Phase01 shapes match `API.md` ✅
+  - Implemented in `server.py`: `ApiException`, `ok()` helper, `{success, data, error}` envelope
+- [x] STR-02 Stable IDs: confirm chunk ID derivation and document guarantees ✅
+  - Implemented in `core/ids.py`: `stable_sha256`, `stable_file_hash`, etc.
+- [x] STR-03 Manifest + versioning: confirm required fields + format bump policy ✅
+  - `manifest.json` schema documented, `format_version` field added
+- [x] STR-04 Atomic build: document temp-dir swap + crash handling ✅
+  - Implemented in `CodeIndex._swap_index_dir()`
+- [x] STR-05 Budgets: define server-side caps for `k`, `max_chars`, `min_score` ✅
+  - Documented in `docs/BUDGETS_POLICY.md`
 
 ## Notes / blockers
 - [ ] Decide whether span info is mandatory for all chunk types (code vs markdown)

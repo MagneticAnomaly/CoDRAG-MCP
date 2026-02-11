@@ -95,8 +95,8 @@ export function SiteFooter({
             {copyright || `© ${currentYear} ${productName} Inc. All rights reserved.`}
           </p>
           <div className="flex gap-6">
-            <a href="/privacy" className="text-xs text-text-subtle hover:text-text transition-colors">Privacy Policy</a>
-            <a href="/terms" className="text-xs text-text-subtle hover:text-text transition-colors">Terms of Service</a>
+            <a href="https://codrag.io/privacy" className="text-xs text-text-subtle hover:text-text transition-colors">Privacy Policy</a>
+            <a href="https://codrag.io/terms" className="text-xs text-text-subtle hover:text-text transition-colors">Terms of Service</a>
           </div>
         </div>
       </div>
@@ -108,27 +108,27 @@ const defaultSections: FooterSection[] = [
   {
     title: 'Product',
     links: [
-      { label: 'Download', href: '/download' },
-      { label: 'Pricing', href: '/pricing' },
-      { label: 'Changelog', href: '/changelog' },
+      { label: 'Download', href: 'https://codrag.io/download' },
+      { label: 'Pricing', href: 'https://codrag.io/pricing' },
+      { label: 'Changelog', href: 'https://codrag.io/changelog' },
       { label: 'Docs', href: 'https://docs.codrag.io' },
     ],
   },
   {
     title: 'Resources',
     links: [
-      { label: 'Blog', href: '/blog' },
-      { label: 'Community', href: '/community' },
-      { label: 'Help Center', href: 'https://support.codrag.io' },
+      { label: 'Blog', href: 'https://codrag.io/blog' },
+      { label: 'Community', href: 'https://codrag.io/community' },
+      { label: 'Help Center', href: 'https://codrag.io/support' },
     ],
   },
   {
     title: 'Company',
     links: [
-      { label: 'About', href: '/about' },
-      { label: 'Careers', href: '/careers' },
-      { label: 'Contact', href: '/contact' },
-      { label: 'Security', href: '/security' },
+      { label: 'About', href: 'https://codrag.io/about' },
+      { label: 'Careers', href: 'https://codrag.io/careers' },
+      { label: 'Contact', href: 'https://codrag.io/contact' },
+      { label: 'Security', href: 'https://codrag.io/security' },
     ],
   },
 ];

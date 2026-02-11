@@ -4,28 +4,14 @@ CoDRAG is a local-first semantic code search and context assembly tool that help
 
 ## Prerequisites
 
-- **Python 3.10+**
-- **Ollama** running locally with an embedding model (e.g., `nomic-embed-text`)
+- **Python 3.11+**
+- **Ollama** (optional) — only needed if you prefer Ollama-based embeddings or want small/large LLM models for analysis
+
+CoDRAG ships with a **built-in embedding model** (nomic-embed-text-v1.5 via ONNX Runtime) that works out of the box with zero configuration.
 
 ## Installation
 
-### 1. Install Ollama
-
-```bash
-# macOS
-brew install ollama
-
-# Linux
-curl -fsSL https://ollama.com/install.sh | sh
-```
-
-### 2. Pull an Embedding Model
-
-```bash
-ollama pull nomic-embed-text
-```
-
-### 3. Install CoDRAG
+### 1. Install CoDRAG
 
 ```bash
 pip install codrag
@@ -34,9 +20,34 @@ pip install codrag
 Or install from source:
 
 ```bash
-git clone https://github.com/codrag/codrag.git
-cd codrag
+git clone https://github.com/EricBintner/CoDRAG.git
+cd CoDRAG
 pip install -e ".[dev]"
+```
+
+### 2. (Optional) Pre-download the Embedding Model
+
+The built-in model downloads automatically on first build (~100 MB). To pre-download:
+
+```bash
+codrag models
+```
+
+### 3. (Optional) Install Ollama for Additional LLMs
+
+If you want Ollama-based embeddings or small/large models for analysis:
+
+```bash
+# macOS
+brew install ollama
+
+# Linux
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Pull recommended models
+ollama pull nomic-embed-text    # Embedding (alternative to built-in)
+ollama pull ministral-3:3b      # Small model for fast analysis
+ollama pull ministral-3:14b     # Large model for complex reasoning
 ```
 
 ## Quick Start
@@ -148,6 +159,19 @@ codrag serve --dashboard
 
 Open `http://127.0.0.1:8400` in your browser.
 
+## AI Models Configuration
+
+CoDRAG uses up to 4 model slots, all configurable from the dashboard **Settings → AI Models** page:
+
+| Slot | Purpose | Default |
+|------|---------|--------|
+| **Embedding** | Semantic search vectors | Built-in (nomic-embed-text-v1.5 via ONNX) |
+| **Small** | Fast analysis & parsing | None (optional, e.g. `ministral-3:3b`) |
+| **Large** | Complex reasoning & summaries | None (optional, e.g. `ministral-3:14b`) |
+| **CLaRa** | 16× context compression | None (optional) |
+
+Changing the embedding model/source requires a **full index rebuild**.
+
 ## Troubleshooting
 
 ### Ollama Connection Failed
@@ -156,7 +180,7 @@ Open `http://127.0.0.1:8400` in your browser.
 Error: OLLAMA_UNAVAILABLE
 ```
 
-**Solution:** Ensure Ollama is running:
+**Solution:** Ensure Ollama is running (only needed if using Ollama-based models):
 ```bash
 ollama serve
 ```
@@ -200,5 +224,5 @@ For repositories with many files:
 
 ## Getting Help
 
-- **Issues:** [GitHub Issues](https://github.com/codrag/codrag/issues)
-- **Discussions:** [GitHub Discussions](https://github.com/codrag/codrag/discussions)
+- **Issues:** [GitHub Issues](https://github.com/EricBintner/CoDRAG/issues)
+- **Discussions:** [GitHub Discussions](https://github.com/EricBintner/CoDRAG/discussions)

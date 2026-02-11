@@ -49,7 +49,7 @@ export function WatchControlPanel({
           loading={loading}
           icon={isActive ? EyeOff : Eye}
         >
-          {isActive ? 'Stop Watch' : 'Start Watch'}
+          {isActive ? 'Disable Sync' : 'Enable Sync'}
         </Button>
       </div>
     </Container>

@@ -3,9 +3,12 @@ import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cn } from '../../lib/utils';
 import { Button } from '../primitives/Button';
+import { InfoTooltip } from '../primitives/InfoTooltip';
 
 export interface PanelChromeProps {
   title: string;
+  description?: string;
+  docsUrl?: string;
   icon?: LucideIcon;
   collapsed?: boolean;
   onCollapse?: () => void;
@@ -19,6 +22,8 @@ export interface PanelChromeProps {
 
 export function PanelChrome({
   title,
+  description,
+  docsUrl,
   icon: Icon,
   collapsed = false,
   onCollapse,
@@ -45,6 +50,7 @@ export function PanelChrome({
         <div className="flex items-center gap-2 overflow-hidden">
           {Icon && <Icon className="w-4 h-4 text-text-muted flex-shrink-0" />}
           <span className="font-medium text-sm text-text truncate select-none">{title}</span>
+          {description && <InfoTooltip content={description} href={docsUrl} className="ml-1 flex-shrink-0" />}
         </div>
 
         <div className="flex items-center gap-1">

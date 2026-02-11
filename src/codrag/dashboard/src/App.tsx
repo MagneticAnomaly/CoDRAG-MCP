@@ -12,6 +12,7 @@ import {
   IndexStatusCard,
   BuildCard,
   SearchPanel,
+  UsageGuidePanel,
   ContextOptionsPanel,
   SearchResultsList,
   ChunkPreview,
@@ -55,6 +56,8 @@ import {
   type PanelDefinition,
   // Layout
   PanelPicker,
+  LogConsole,
+  useEventStream,
   PANEL_REGISTRY,
 } from '@codrag/ui'
 import 'react-grid-layout/css/styles.css'
@@ -156,6 +159,16 @@ interface DevSettingsPanelProps {
   onThemeChange: (theme: string) => void
   bgImage: string | null
   onBgImageChange: (url: string | null) => void
+  projectConfig: ProjectConfig
+  onProjectConfigChange: (config: ProjectConfig) => void
+  onSaveConfig: () => void
+  configDirty: boolean
+  hasProject: boolean
+  onDetectStack?: () => Promise<{
+    recommended_globs: string[];
+    detected_presets: string[];
+    all_presets: Record<string, string[]>;
+  }>
 }
 
 function DevSettingsPanel({
@@ -167,6 +180,12 @@ function DevSettingsPanel({
   onThemeChange,
   bgImage,
   onBgImageChange,
+  projectConfig,
+  onProjectConfigChange,
+  onSaveConfig,
+  configDirty,
+  hasProject,
+  onDetectStack,
 }: DevSettingsPanelProps) {
   const api = useApiClient()
   const [healthResult, setHealthResult] = useState<string>('No test run yet')
@@ -197,7 +216,7 @@ function DevSettingsPanel({
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <h2 className="text-sm font-semibold text-text flex items-center gap-2">
           <Settings className="w-4 h-4" />
-          Dev Settings
+          Settings
         </h2>
         <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close">
           <X className="w-4 h-4" />
@@ -205,6 +224,25 @@ function DevSettingsPanel({
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        {/* Project Settings */}
+        {hasProject && (
+          <section>
+            <h3 className="text-xs font-medium text-text-muted uppercase tracking-wide mb-3">Project Settings</h3>
+            <ProjectSettingsPanel
+              config={projectConfig}
+              onChange={onProjectConfigChange}
+              onSave={onSaveConfig}
+              onDetectStack={onDetectStack}
+              isDirty={configDirty}
+              bare
+            />
+          </section>
+        )}
+
+        <div className="h-px bg-border" />
+
+        <h3 className="text-xs font-medium text-text-muted uppercase tracking-wide">Dev Settings</h3>
+
         {/* Style Picker */}
         <section>
           <h3 className="text-xs font-medium text-text-muted uppercase tracking-wide mb-2">Appearance</h3>
@@ -284,8 +322,12 @@ function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   // ── UI preferences ─────────────────────────────────────────
-  const [uiMode, setUiMode] = useState<'light' | 'dark'>('light')
-  const [uiTheme, setUiTheme] = useState<string>('none')
+  const [uiMode, setUiMode] = useState<'light' | 'dark'>(() =>
+    (localStorage.getItem('codrag_ui_mode') as 'light' | 'dark') ?? 'light'
+  )
+  const [uiTheme, setUiTheme] = useState<string>(() =>
+    localStorage.getItem('codrag_ui_theme') ?? 'none'
+  )
   const [devSettingsOpen, setDevSettingsOpen] = useState(false)
   const [bgImage, setBgImage] = useState<string | null>(null)
   const [dashboardLayout, setDashboardLayout] = useState<DashboardLayout | null>(null)
@@ -371,6 +413,19 @@ function App() {
   const [loadingModels, setLoadingModels] = useState<Record<string, boolean>>({})
   const [testingSlot, setTestingSlot] = useState<'embedding' | 'small' | 'large' | 'clara' | null>(null)
   const [testResults, setTestResults] = useState<Record<string, EndpointTestResult>>({})
+
+  // ── Event Stream ───────────────────────────────────────────
+  const { logs, tasks, clearLogs } = useEventStream(`${api.baseUrl}/events`, 1000);
+
+  // Helper to find relevant task for current project
+  const findActiveTask = useCallback((type: 'index_build' | 'trace_build') => {
+    if (!selectedProjectId) return undefined;
+    const entry = Object.values(tasks).find(t => 
+      t.task_id.startsWith(`${type}:${selectedProjectId}`) && 
+      (t.status === 'running' || t.status === 'completed')
+    );
+    return entry;
+  }, [tasks, selectedProjectId]);
 
   // ── Derived ────────────────────────────────────────────────
   const selectedProject = useMemo(
@@ -653,6 +708,11 @@ function App() {
     setConfigDirty(true)
   }, [])
 
+  const handleDetectStack = useCallback(async () => {
+    if (!selectedProjectId) throw new Error("No project selected")
+    return await api.detectStack(selectedProjectId)
+  }, [api, selectedProjectId])
+
   // ── Watch handlers ──────────────────────────────────────────
 
   const refreshWatchStatus = useCallback(async (projId: string) => {
@@ -852,13 +912,24 @@ function App() {
     if (uiMode === 'dark') root.classList.add('dark')
     else root.classList.remove('dark')
     root.setAttribute('data-codrag-theme', uiTheme === 'none' ? 'a' : uiTheme)
+    localStorage.setItem('codrag_ui_mode', uiMode)
+    localStorage.setItem('codrag_ui_theme', uiTheme)
   }, [uiMode, uiTheme])
 
-  // ── Init: load projects ────────────────────────────────────
+  // ── Init: load projects + global config ─────────────────────
   useEffect(() => {
     const init = async () => {
       try {
         await refreshProjects()
+        // Load global config (LLM endpoints, models, etc.)
+        try {
+          const globalCfg = await api.getGlobalConfig()
+          if (globalCfg.llm_config) {
+            setLLMConfig(globalCfg.llm_config)
+          }
+        } catch {
+          // Global config not available — use defaults
+        }
       } catch {
         // Error already set
       } finally {
@@ -866,7 +937,23 @@ function App() {
       }
     }
     void init()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshProjects])
+
+  // ── Auto-save LLM config to backend ─────────────────────────
+  const llmConfigSkipRef = useRef(0) // skip initial + loaded-from-backend
+  useEffect(() => {
+    if (llmConfigSkipRef.current < 2) {
+      llmConfigSkipRef.current++
+      return
+    }
+    const timeout = setTimeout(() => {
+      api.updateGlobalConfig({ llm_config: llmConfig }).catch(() => {
+        // Silent fail — config will be retried on next change
+      })
+    }, 500)
+    return () => clearTimeout(timeout)
+  }, [api, llmConfig])
 
   // ── Auto-fetch models for pre-configured endpoints ──────────
   useEffect(() => {
@@ -899,17 +986,32 @@ function App() {
     api.getPathWeights(selectedProjectId).then((data) => {
       setPathWeights(data.path_weights ?? {})
     }).catch(() => { setPathWeights({}) })
-    // Fetch trace status
+    // Fetch trace status, then coverage if trace is enabled
     api.getTraceStatus(selectedProjectId).then((data) => {
+      const enabled = data.enabled ?? false
       setTraceStatus({
-        enabled: data.enabled ?? false,
+        enabled,
         exists: data.exists ?? false,
         building: data.building ?? false,
         counts: data.counts ?? { nodes: 0, edges: 0 },
       })
-    }).then(() => {
-      // Fetch trace coverage after status is known
-      fetchTraceCoverage()
+      // Fetch coverage directly — can't rely on fetchTraceCoverage() here
+      // because setTraceStatus hasn't applied yet (stale closure)
+      if (enabled && selectedProjectId) {
+        setTraceCoverage(prev => ({ ...prev, loading: true }))
+        api.getTraceCoverage(selectedProjectId).then((cov) => {
+          setTraceCoverage({
+            summary: cov.summary,
+            untraced: cov.untraced,
+            stale: cov.stale,
+            ignored: cov.ignored,
+            building: cov.building,
+            loading: false,
+          })
+        }).catch(() => {
+          setTraceCoverage(prev => ({ ...prev, loading: false }))
+        })
+      }
     }).catch(() => { setTraceStatus({ enabled: false, exists: false, building: false, counts: { nodes: 0, edges: 0 } }) })
     // Load project config
     api.getProject(selectedProjectId).then((data) => {
@@ -938,17 +1040,39 @@ function App() {
   // ── Panel content (Storybook components only) ──────────────
 
   const panelContent = useMemo(() => ({
+    'log-console': (
+      <LogConsole
+        logs={logs}
+        onClear={clearLogs}
+        className="h-full border-none shadow-none bg-transparent"
+        defaultExpanded={true}
+      />
+    ),
+    'usage-guide': (
+      <UsageGuidePanel bare />
+    ),
     status: (
       <IndexStatusCard
-        stats={{
-          loaded: projectStatus?.index.exists ?? false,
-          total_documents: projectStatus?.index.total_chunks,
-          model: projectStatus?.index.embedding_model,
-          built_at: projectStatus?.index.last_build_at ?? undefined,
-          embedding_dim: projectStatus?.index.embedding_dim,
+        stats={projectStatus ? {
+          loaded: projectStatus.index.exists,
+          index_dir: selectedProject?.path,
+          total_documents: projectStatus.index.total_chunks,
+          model: projectStatus.index.embedding_model,
+          built_at: projectStatus.index.last_build_at ?? undefined,
+          embedding_dim: projectStatus.index.embedding_dim,
+          build: projectStatus.index.build,
+        } : {
+          loaded: false,
+          total_documents: 0,
+          embedding_dim: 0,
+          model: 'Unknown',
+          built_at: undefined,
+          build: undefined,
         }}
-        building={isBuilding || projectStatus?.building}
-        lastError={projectStatus?.index.last_error?.message ?? null}
+        building={projectStatus?.building ?? false}
+        progress={findActiveTask('index_build')}
+        lastError={projectStatus?.index.last_error?.message}
+        className="h-full border-none shadow-none bg-transparent"
         bare
       />
     ),
@@ -962,17 +1086,31 @@ function App() {
       />
     ),
     'llm-status': (
-      <LLMStatusWidget
-        services={[
-          {
-            name: 'Embedding',
-            status: 'connected',
-            type: 'ollama',
-            url: projectStatus?.index.embedding_model ?? 'not configured',
-          },
-        ]}
-        bare
-      />
+      <div className="h-full overflow-y-auto p-4">
+        <LLMStatusWidget
+          services={[
+            {
+              name: 'Embedding',
+              status: llmConfig.embedding.source === 'endpoint' ? 'connected' : 'disabled',
+              type: 'other',
+              model: llmConfig.embedding.model,
+            },
+            {
+              name: 'Small LLM',
+              status: llmConfig.small_model.enabled ? 'connected' : 'disabled',
+              type: 'ollama',
+              model: llmConfig.small_model.model,
+            },
+            {
+              name: 'Large LLM',
+              status: llmConfig.large_model.enabled ? 'connected' : 'disabled',
+              type: 'openai',
+              model: llmConfig.large_model.model,
+            },
+          ]}
+          bare
+        />
+      </div>
     ),
     search: (
       <SearchPanel
@@ -1069,16 +1207,6 @@ function App() {
         bare
       />
     ),
-    settings: (
-      <div className="p-4">
-        <ProjectSettingsPanel
-          config={projectConfig}
-          onChange={handleProjectConfigChange}
-          onSave={() => void handleSaveConfig()}
-          isDirty={configDirty}
-        />
-      </div>
-    ),
     trace: (
       <TraceExplorer
         traceEnabled={traceStatus.enabled}
@@ -1090,6 +1218,7 @@ function App() {
         onGetNeighbors={handleGetTraceNeighbors}
         onBuildTrace={handleBuildTrace}
         onEnableTrace={handleEnableTrace}
+        progress={findActiveTask('trace_build')}
       />
     ),
     'trace-coverage': (
@@ -1105,6 +1234,7 @@ function App() {
         onAddIgnorePattern={handleAddIgnorePattern}
         onRemoveIgnorePattern={handleRemoveIgnorePattern}
         onRefresh={fetchTraceCoverage}
+        progress={findActiveTask('trace_build')}
         bare
       />
     ),
@@ -1118,6 +1248,7 @@ function App() {
     handlePinFile, handleUnpinFile, pathWeights, handlePathWeightChange,
     handleSearchTrace, handleGetTraceNode, handleGetTraceNeighbors, handleBuildTrace, handleEnableTrace,
     handleTraceAll, handleRetraceStale, handleAddIgnorePattern, handleRemoveIgnorePattern, fetchTraceCoverage,
+    findActiveTask, logs, clearLogs, tasks, llmConfig,
   ])
 
   // ── Dynamic panel definitions for pinned files ──────────────
@@ -1176,10 +1307,22 @@ function App() {
         onWeightChange={handlePathWeightChange}
       />
     ),
+    settings: (
+      <div className="max-w-4xl mx-auto w-full p-6">
+        <ProjectSettingsPanel
+          config={projectConfig}
+          onChange={handleProjectConfigChange}
+          onSave={() => void handleSaveConfig()}
+          onDetectStack={handleDetectStack}
+          isDirty={configDirty}
+        />
+      </div>
+    ),
   }), [
     llmConfig, handleLLMConfigChange, handleAddEndpoint, handleEditEndpoint, handleDeleteEndpoint,
     handleTestEndpoint, handleFetchModels, handleTestModel, availableModels, loadingModels, testingSlot, testResults,
     fileTree, pinnedPaths, handlePinFile, handleUnpinFile, handleLoadFileContent, pathWeights, handlePathWeightChange,
+    projectConfig, handleProjectConfigChange, handleSaveConfig, configDirty, handleDetectStack,
   ])
 
   // ── Loading state ──────────────────────────────────────────
@@ -1200,6 +1343,12 @@ function App() {
         onThemeChange={setUiTheme}
         bgImage={bgImage}
         onBgImageChange={setBgImage}
+        projectConfig={projectConfig}
+        onProjectConfigChange={handleProjectConfigChange}
+        onSaveConfig={() => void handleSaveConfig()}
+        configDirty={configDirty}
+        hasProject={!!selectedProject}
+        onDetectStack={handleDetectStack}
       />
       {/* Floating Dev Settings trigger — always visible */}
       {!devSettingsOpen && (

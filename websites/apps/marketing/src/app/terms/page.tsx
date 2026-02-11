@@ -131,7 +131,7 @@ export default function Page() {
                       <span>USD</span>
                       
                       <span className="font-bold">Refunds</span>
-                      <span>14-day money-back guarantee (<a href="mailto:billing@codrag.io" className="text-blue-600 underline">billing@codrag.io</a>)</span>
+                      <span>14-day money-back guarantee (<a href="mailto:support@codrag.io" className="text-blue-600 underline">support@codrag.io</a>)</span>
                    </div>
                 </section>
 
@@ -153,7 +153,7 @@ export default function Page() {
                       </tr>
                       <tr>
                         <td className="px-4 py-3 border-r border-slate-200 font-medium">Pro / Team</td>
-                        <td className="px-4 py-3 text-slate-600">Email Support (support.codrag.io)</td>
+                        <td className="px-4 py-3 text-slate-600">Private Email (support@codrag.io)</td>
                       </tr>
                       <tr>
                         <td className="px-4 py-3 border-r border-slate-200 font-medium">Enterprise</td>
@@ -169,7 +169,7 @@ export default function Page() {
                   </h2>
                   <div className="text-sm text-slate-500 bg-slate-50 p-6 border border-slate-200 font-mono leading-relaxed">
                     <p className="mb-4">
-                      THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+                      THE SOFTWARE IS PROVIDED &quot;AS IS&quot;, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
                     </p>
                     <p>
                       IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

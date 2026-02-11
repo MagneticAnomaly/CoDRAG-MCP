@@ -129,10 +129,10 @@ class TestMCPProtocol:
         
         assert response["id"] == 2
         tools = response["result"]["tools"]
-        assert len(tools) == 4
+        assert len(tools) == 7
         
         tool_names = {t["name"] for t in tools}
-        assert tool_names == {"codrag_status", "codrag_build", "codrag_search", "codrag_context"}
+        assert tool_names == {"codrag_status", "codrag_build", "codrag_search", "codrag", "codrag_trace_search", "codrag_trace_neighbors", "codrag_trace_coverage"}
 
     @pytest.mark.asyncio
     async def test_ping(self, server):
@@ -293,7 +293,7 @@ class TestToolSearch:
 
 
 class TestToolContext:
-    """Test codrag_context tool."""
+    """Test codrag tool (context assembly)."""
 
     @pytest.mark.asyncio
     async def test_context_success(self, server, mock_context_response):
@@ -458,7 +458,7 @@ class TestToolsCall:
             "id": 15,
             "method": "tools/call",
             "params": {
-                "name": "codrag_context",
+                "name": "codrag",
                 "arguments": {"query": "find", "max_chars": MAX_CONTEXT_CHARS + 1},
             },
         }
@@ -512,7 +512,7 @@ class TestToolSchemas:
 
     def test_context_requires_query(self):
         """Test context tool requires query parameter."""
-        context_tool = next(t for t in TOOLS if t["name"] == "codrag_context")
+        context_tool = next(t for t in TOOLS if t["name"] == "codrag")
         assert "query" in context_tool["inputSchema"]["required"]
 
     def test_status_no_required_params(self):

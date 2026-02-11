@@ -35,6 +35,7 @@ function loadLayout(key: string): DashboardLayout | null {
 }
 
 function saveLayout(key: string, layout: DashboardLayout): void {
+  if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(key, JSON.stringify(layout));
   } catch {

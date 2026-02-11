@@ -65,9 +65,46 @@ class OllamaEmbedder(Embedder):
         self.timeout_s = timeout_s
         self.max_retries = max_retries
         self.keep_alive = keep_alive
+        self._readiness_checked = False
+
+    def _ensure_model_ready(self) -> None:
+        """Check if the embedding model is loaded and preload if needed.
+
+        Only runs once per embedder lifetime to avoid repeated overhead.
+        Uses the model_readiness module to detect cold-start scenarios
+        and trigger model loading before the first real request.
+        """
+        if self._readiness_checked:
+            return
+        self._readiness_checked = True
+
+        try:
+            from codrag.core.model_readiness import ollama_ensure_ready, ModelStatus
+
+            result = ollama_ensure_ready(
+                url=self.base_url,
+                model=self.model,
+                timeout_s=self.timeout_s,
+                keep_alive=self.keep_alive,
+            )
+            if result.status == ModelStatus.READY:
+                logger.info("Embedding model '%s' is ready", self.model)
+            elif result.status == ModelStatus.NOT_FOUND:
+                logger.error(
+                    "Embedding model '%s' not found on %s. Run: ollama pull %s",
+                    self.model, self.base_url, self.model,
+                )
+            else:
+                logger.warning(
+                    "Embedding model '%s' readiness: %s — %s",
+                    self.model, result.status.value, result.message,
+                )
+        except Exception as e:
+            logger.warning("Readiness check failed (non-fatal): %s", e)
 
     def embed(self, text: str) -> EmbeddingResult:
         """Generate an embedding for a single text."""
+        self._ensure_model_ready()
         payload = {
             "model": self.model,
             "prompt": text,

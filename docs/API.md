@@ -58,6 +58,7 @@ Notes:
 - `400` for validation errors.
 - `401` for auth failures (network mode).
 - `404` for missing resources.
+- `403` for feature-gated actions (upgrade required).
 - `409` for conflicts (already exists, build already running).
 - `500` for internal errors.
 
@@ -83,6 +84,10 @@ Minimum stable set:
 Phase 05 (MCP) adds:
 - `DAEMON_UNAVAILABLE`
 - `PROJECT_SELECTION_AMBIGUOUS`
+
+Phase 11 (Tier Enforcement) adds:
+- `FEATURE_GATED` — returned with HTTP 403 when a feature requires a higher tier.
+  Includes `hint` (upgrade URL) and `details.feature`, `details.current_tier`, `details.required_tier`.
 
 ## Pagination
 
@@ -482,9 +487,398 @@ Response `data`:
 }
 ```
 
-### LLM status
+### License & Tier
 
-#### `GET /llm/status`
+#### `GET /license`
+
+Purpose:
+- Get current license tier and feature availability.
+
+Response `data`:
+
+```json
+{
+  "license": {
+    "tier": "free",
+    "valid": true,
+    "email": null,
+    "expires_at": null,
+    "seats": 1,
+    "features": []
+  },
+  "features": {
+    "auto_rebuild": false,
+    "auto_trace": false,
+    "trace_index": true,
+    "trace_search": true,
+    "mcp_tools": true,
+    "mcp_trace_expand": false,
+    "path_weights": true,
+    "clara_compression": false,
+    "multi_repo_agent": false,
+    "team_config": false,
+    "audit_log": false,
+    "projects_max": 1
+  }
+}
+```
+
+Notes:
+- `tier` is one of: `free`, `starter`, `pro`, `team`, `enterprise`.
+- `features` map shows boolean availability for each gated feature at current tier.
+- `projects_max` is a numeric limit (1 for free, 3 for starter, 999 for pro+).
+
+#### `POST /license/activate`
+
+Purpose:
+- Save/activate a license key on this machine.
+
+Request:
+
+```json
+{
+  "key": "..."
+}
+```
+
+Response `data`:
+- Same shape as `GET /license`.
+
+#### `POST /license/deactivate`
+
+Purpose:
+- Remove the locally stored license on this machine (reverts to Free tier behavior).
+
+Response `data`:
+- Same shape as `GET /license`.
+
+### MCP / IDE Integration
+
+#### `GET /api/code-index/mcp-config`
+
+Purpose:
+- Generate copy/paste MCP configuration for IDE setup.
+
+Query params:
+- `ide`: `cursor | windsurf | vscode | jetbrains | claude | all`
+- `mode`: `direct | auto | project`
+- `daemon_url`: optional override for the daemon URL included in generated configs
+- `project_id`: required when `mode=project`
+
+Response `data` (single IDE):
+
+```json
+{
+  "daemon_url": "http://127.0.0.1:8400",
+  "file": ".cursor/mcp.json",
+  "path_hint": "Project root or ~/.cursor/",
+  "config": {"mcpServers": {"codrag": {"command": "codrag", "args": ["mcp", "--auto", "--daemon", "http://127.0.0.1:8400"]}}}
+}
+```
+
+Response `data` (`ide=all`):
+
+```json
+{
+  "daemon_url": "http://127.0.0.1:8400",
+  "configs": {
+    "cursor": {"file": ".cursor/mcp.json", "path_hint": "...", "config": {}},
+    "vscode": {"file": ".vscode/mcp.json", "path_hint": "...", "config": {}}
+  }
+}
+```
+
+### File watcher (auto-rebuild)
+
+#### `POST /projects/{project_id}/watch/start`
+
+Purpose:
+- Enable auto-rebuild file watcher for a project.
+- **Requires STARTER+ tier** (gated by `auto_rebuild` feature).
+
+Query params:
+- `debounce_ms`: debounce delay in ms (default 5000, range 500-60000)
+- `min_gap_ms`: minimum gap between rebuilds in ms (default 2000, range 500-30000)
+
+Response `data`:
+
+```json
+{
+  "enabled": true,
+  "status": {
+    "enabled": true,
+    "state": "idle",
+    "debounce_ms": 5000,
+    "stale": false,
+    "pending": false,
+    "pending_paths_count": 0
+  }
+}
+```
+
+Notes:
+- When file changes are detected, watcher triggers both index and trace rebuilds (if trace enabled).
+- Watcher uses project config for include/exclude globs.
+
+#### `POST /projects/{project_id}/watch/stop`
+
+Purpose:
+- Disable file watcher.
+
+Response `data`:
+
+```json
+{
+  "enabled": false
+}
+```
+
+#### `GET /projects/{project_id}/watch/status`
+
+Purpose:
+- Get watcher status.
+
+Response `data`:
+
+```json
+{
+  "enabled": true,
+  "state": "idle",
+  "debounce_ms": 5000,
+  "stale": false,
+  "stale_since": null,
+  "pending": false,
+  "pending_paths_count": 0,
+  "next_rebuild_at": null,
+  "last_event_at": null,
+  "last_rebuild_at": null
+}
+```
+
+### Path weights
+
+#### `GET /projects/{project_id}/path_weights`
+
+Purpose:
+- Get user-defined path weight multipliers.
+
+Response `data`:
+
+```json
+{
+  "path_weights": {
+    "src/core/": 1.5,
+    "docs/": 0.5
+  }
+}
+```
+
+#### `PUT /projects/{project_id}/path_weights`
+
+Purpose:
+- Update path weight multipliers (0.0–2.0 range, clamped).
+
+Request:
+
+```json
+{
+  "path_weights": {
+    "src/core/": 1.5,
+    "docs/": 0.5
+  }
+}
+```
+
+### Trace (Phase 04) — additional endpoints
+
+#### `POST /projects/{project_id}/trace/build`
+
+Purpose:
+- Trigger trace index build.
+
+Response `data`:
+
+```json
+{
+  "started": true,
+  "building": true
+}
+```
+
+#### `GET /projects/{project_id}/trace/coverage`
+
+Purpose:
+- Get trace coverage statistics (traced, untraced, stale, ignored files).
+
+Response `data`:
+
+```json
+{
+  "summary": {
+    "total_files": 42,
+    "traced_files": 35,
+    "untraced_files": 5,
+    "stale_files": 2,
+    "ignored_files": 0,
+    "coverage_pct": 83.3
+  },
+  "untraced": [{"path": "...", "language": "python", "size": 1234}],
+  "stale": [{"path": "...", "language": "python", "size": 1234}],
+  "ignored": []
+}
+```
+
+#### `POST /projects/{project_id}/trace/ignore`
+
+Purpose:
+- Add or remove trace-specific ignore patterns.
+
+Request:
+
+```json
+{
+  "action": "add",
+  "patterns": ["tests/**", "*_test.py"]
+}
+```
+
+### Activity & Coverage
+
+#### `GET /projects/{project_id}/activity`
+
+Purpose:
+- Get activity heatmap data for the project.
+
+Response `data`:
+
+```json
+{
+  "activity": []
+}
+```
+
+Notes:
+- Returns activity data for visualization in the dashboard heatmap panel.
+
+#### `GET /projects/{project_id}/coverage`
+
+Purpose:
+- Get index coverage statistics for the project.
+
+Response `data`:
+
+```json
+{
+  "summary": {
+    "total_files": 100,
+    "indexed_files": 85,
+    "pending_files": 10,
+    "ignored_files": 5,
+    "coverage_pct": 85.0
+  },
+  "tree": []
+}
+```
+
+### Files & roots
+
+#### `GET /projects/{project_id}/roots`
+
+Purpose:
+- Get working roots for the project.
+
+Response `data`:
+
+```json
+{
+  "roots": ["/abs/path/to/repo"]
+}
+```
+
+#### `GET /projects/{project_id}/files`
+
+Purpose:
+- Get file tree for the project.
+
+Query params:
+- `path`: subdirectory path (default: project root)
+- `depth`: max depth (default 3)
+
+Response `data`:
+
+```json
+{
+  "path": "/abs/path",
+  "tree": [
+    {"name": "src", "type": "folder", "children": []},
+    {"name": "README.md", "type": "file"}
+  ]
+}
+```
+
+#### `GET /projects/{project_id}/file`
+
+Purpose:
+- Get content of a single file (repo-root-relative path).
+
+Query params:
+- `path`: repo-root-relative file path (required)
+
+Response `data`:
+
+```json
+{
+  "content": "file contents...",
+  "path": "src/main.py",
+  "size": 1234
+}
+```
+
+Notes:
+- Path traversal (`..`) and absolute paths are rejected.
+- File must be within project root and pass include/exclude policy.
+
+### Embedding & CLaRa
+
+#### `GET /embedding/status`
+
+Purpose:
+- Get native embedding model status and current embedding provider info.
+
+Response `data`:
+
+```json
+{
+  "available": true,
+  "model": "nomic-embed-text-v1.5",
+  "dim": 768,
+  "downloaded": true
+}
+```
+
+#### `POST /embedding/download`
+
+Purpose:
+- Download/verify native embedding model (HuggingFace ONNX).
+
+#### `GET /clara/status`
+
+Purpose:
+- Get CLaRa compression sidecar status.
+
+#### `GET /clara/health`
+
+Purpose:
+- CLaRa health check.
+
+### LLM Proxy & Model Management
+
+These endpoints support the dashboard's AI Models settings page.
+
+#### `GET /api/llm/status`
+
+Purpose:
+- Legacy status check for Ollama and CLaRa connectivity.
 
 Response `data`:
 
@@ -495,16 +889,126 @@ Response `data`:
 }
 ```
 
-#### `POST /llm/test`
+#### `POST /api/llm/proxy/models`
 
 Purpose:
-- Force a connectivity check.
+- Fetch available models from an endpoint (Ollama or compatible).
+
+Request body:
+
+```json
+{
+  "provider": "ollama",
+  "url": "http://localhost:11434"
+}
+```
 
 Response `data`:
 
 ```json
 {
-  "ollama": {"connected": true},
-  "clara": {"connected": false}
+  "models": ["nomic-embed-text:latest", "ministral-3:3b", "ministral-3:14b"]
 }
 ```
+
+#### `POST /api/llm/proxy/test`
+
+Purpose:
+- Test connectivity to an endpoint.
+
+#### `POST /llm/test`
+
+Purpose:
+- Legacy endpoint for testing LLM connectivity.
+
+Notes:
+- Alias for `/api/llm/test`.
+
+#### `POST /api/llm/proxy/test-model`
+
+Purpose:
+- Test a specific model with readiness-aware logic. Handles embedding models
+  differently (uses `/api/embeddings` instead of `/api/generate`).
+
+Request body:
+
+```json
+{
+  "provider": "ollama",
+  "url": "http://localhost:11434",
+  "model": "nomic-embed-text",
+  "kind": "embedding"
+}
+```
+
+Response `data`:
+
+```json
+{
+  "success": true,
+  "message": "Model responded successfully (load: 0.3s)",
+  "model_status": "ready"
+}
+```
+
+Notes:
+- `kind` can be `"embedding"`, `"small"`, `"large"`, or `"clara"`.
+- Embedding models bypass the `/api/generate` preload and use `/api/embeddings` directly.
+- Generous timeouts (120s) accommodate cold-start model loading.
+
+#### `POST /api/llm/model-status`
+
+Purpose:
+- Check model readiness status without sending a test request.
+
+### Global Configuration
+
+### Legacy Endpoints (Deprecated)
+
+These endpoints use a global singleton index and do not support multi-project configurations.
+They are deprecated and will be removed in a future version. Use project-scoped equivalents.
+
+#### `POST /api/code-index/context` (Deprecated)
+
+Purpose:
+- Get assembled context for LLM injection.
+
+Notes:
+- **Deprecated**: Use `POST /projects/{project_id}/context` instead.
+- Uses global singleton index.
+- Sunset date: 2026-06-01.
+
+#### `POST /api/code-index/chunk` (Deprecated)
+
+Purpose:
+- Get a specific chunk by ID.
+
+Request:
+
+```json
+{
+  "chunk_id": "chunk_abc123"
+}
+```
+
+Notes:
+- **Deprecated**: Use `POST /projects/{project_id}/search` instead.
+- Uses global singleton index.
+- Sunset date: 2026-06-01.
+
+#### `GET /api/code-index/config` (Deprecated)
+
+Purpose:
+- Get global UI configuration including LLM settings.
+
+Notes:
+- The `llm_config` section drives the backend's embedding behavior.
+- Changing `llm_config.embedding.source` or `llm_config.embedding.model` invalidates
+  cached indexes so the next build uses the updated embedder.
+
+#### `PUT /api/code-index/config`
+
+Purpose:
+- Update global UI configuration (deep merge).
+- Auto-saves to `ui_config.json` in the index directory.
+- If the embedding config changes, cached project indexes are cleared.

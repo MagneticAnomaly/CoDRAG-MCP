@@ -44,6 +44,7 @@ dependencies = [
     "onnxruntime>=1.17.0",
     "tokenizers>=0.15.0",
     "huggingface-hub>=0.20.0",
+    "pathspec>=0.11.0",
 ]
 
 [project.optional-dependencies]
@@ -68,10 +69,10 @@ clara = [
 codrag = "codrag.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/anthropics/CoDRAG"
-Documentation = "https://github.com/anthropics/CoDRAG#readme"
-Repository = "https://github.com/anthropics/CoDRAG"
-Issues = "https://github.com/anthropics/CoDRAG/issues"
+Homepage = "https://github.com/EricBintner/CoDRAG"
+Documentation = "https://github.com/EricBintner/CoDRAG#readme"
+Repository = "https://github.com/EricBintner/CoDRAG"
+Issues = "https://github.com/EricBintner/CoDRAG/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/codrag"]
@@ -106,4 +107,4 @@ plugins = ["pydantic.mypy"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-addopts = "-v --cov=codrag --cov-report=term-missing"
+addopts = "-v"

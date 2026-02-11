@@ -2,8 +2,8 @@
   "name": "codrag",
   "display_name": "CoDRAG",
   "description": "Code Documentation and RAG - Multi-project semantic search for codebases. Provides semantic code search, context assembly for LLM prompts, and index management.",
-  "homepage": "https://github.com/anthropics/CoDRAG",
-  "repository": "https://github.com/anthropics/CoDRAG",
+  "homepage": "https://github.com/EricBintner/CoDRAG",
+  "repository": "https://github.com/EricBintner/CoDRAG",
   "license": "MIT",
   "authors": [
     {
@@ -47,8 +47,8 @@
       "description": "Search the index with semantic query"
     },
     {
-      "name": "codrag_context",
-      "description": "Get assembled context for LLM prompt injection"
+      "name": "codrag",
+      "description": "Get assembled context for LLM prompt injection (primary tool)"
     }
   ],
   "resources": [],

@@ -9,6 +9,7 @@ Usage:
 
 from __future__ import annotations
 
+import base64
 import argparse
 import fnmatch
 import hashlib
@@ -20,14 +21,16 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import requests
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from codrag import __version__
 from codrag.api.envelope import ApiException, install_api_exception_handlers, ok
 from codrag.core import CodeIndex, OllamaEmbedder, NativeEmbedder, ClaraCompressor, NoopCompressor
+from codrag.core.events import get_event_bus, BroadcastLogHandler, get_progress_manager
 from codrag.core.project_registry import (
     Project,
     ProjectAlreadyExists,
@@ -44,7 +47,17 @@ from codrag.core.repo_policy import (
 )
 from codrag.core.repo_profile import profile_repo
 from codrag.core.trace import TraceBuilder, TraceIndex, compute_trace_coverage
+from codrag.core.feature_gate import (
+    get_license, check_feature, get_feature_limit, require_feature, clear_license_cache, FeatureGateError,
+)
 from codrag.core.watcher import AutoRebuildWatcher
+from codrag.core.model_readiness import (
+    ModelStatus,
+    get_model_status,
+    ensure_model_ready,
+    ollama_model_loaded,
+    ollama_ensure_ready,
+)
 from codrag.mcp_config import generate_mcp_configs
 
 logging.basicConfig(level=logging.INFO)
@@ -56,6 +69,80 @@ app = FastAPI(
     version=__version__,
 )
 install_api_exception_handlers(app)
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on startup."""
+    import asyncio
+    
+    # Initialize EventBus with running loop for thread-safe dispatch
+    bus = get_event_bus()
+    loop = asyncio.get_running_loop()
+    bus.set_loop(loop)
+    
+    # Attach log handler to capture root logs
+    root_logger = logging.getLogger()
+    handler = BroadcastLogHandler(bus)
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    handler.setFormatter(formatter)
+    root_logger.addHandler(handler)
+    
+    # Initialize ProgressManager (ensure it's created)
+    get_progress_manager()
+    
+    logger.info("CoDRAG EventBus initialized")
+
+
+@app.get("/events")
+async def events_endpoint(request: Request):
+    """
+    Server-Sent Events (SSE) endpoint for real-time logs and progress.
+    """
+    bus = get_event_bus()
+    queue = await bus.subscribe()
+    
+    async def event_generator():
+        try:
+            while True:
+                # Check for client disconnect
+                if await request.is_disconnected():
+                    break
+                    
+                # Wait for next event
+                payload = await queue.get()
+                
+                # Format as SSE
+                yield f"data: {json.dumps(payload)}\n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            await bus.unsubscribe(queue)
+    
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@app.exception_handler(FeatureGateError)
+async def _feature_gate_handler(request, exc: FeatureGateError):
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=403,
+        content={
+            "success": False,
+            "data": None,
+            "error": {
+                "code": "FEATURE_GATED",
+                "message": str(exc),
+                "hint": f"Upgrade to {exc.required_tier} at https://codrag.io/pricing",
+                "details": {
+                    "feature": exc.feature,
+                    "current_tier": exc.current_tier,
+                    "required_tier": exc.required_tier,
+                },
+            },
+        },
+    )
+
 
 # CORS for dashboard
 app.add_middleware(
@@ -106,7 +193,8 @@ _DEFAULT_UI_CONFIG: Dict[str, Any] = {
         "**/*.map",
         "**/*.lock",
     ],
-    "max_file_bytes": 400_000,
+    "max_file_bytes": 500_000,  # Threshold for full indexing (above this = summary only)
+    "hard_limit_bytes": 100_000_000,  # 100MB hard limit (above this = ignored)
     "trace": {"enabled": False},
     "auto_rebuild": {"enabled": False, "debounce_ms": 5000},
     "llm_config": None,  # Will be populated with defaults if missing
@@ -148,13 +236,13 @@ def _default_ui_config() -> Dict[str, Any]:
         },
         "small_model": {
             "enabled": False,
-            "endpoint_id": "default_ollama",
-            "model": "qwen2.5:3b",
+            "endpoint_id": "",
+            "model": "",
         },
         "large_model": {
             "enabled": False,
-            "endpoint_id": "default_ollama",
-            "model": "mistral-nemo",
+            "endpoint_id": "",
+            "model": "",
         },
         "clara": {
             "enabled": False,
@@ -165,6 +253,16 @@ def _default_ui_config() -> Dict[str, Any]:
 
     
     return cfg
+
+
+def _deep_merge(base: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, Any]:
+    """Recursively merge update dict into base dict."""
+    for k, v in update.items():
+        if k in base and isinstance(base[k], dict) and isinstance(v, dict):
+            _deep_merge(base[k], v)
+        else:
+            base[k] = v
+    return base
 
 
 def _load_ui_config() -> Dict[str, Any]:
@@ -180,19 +278,27 @@ def _load_ui_config() -> Dict[str, Any]:
 
     cfg = _default_ui_config()
     if data:
+        # Top-level merge
         for key in [
             "repo_root",
             "core_roots",
             "working_roots",
             "include_globs",
             "exclude_globs",
-            "llm_config",
             "max_file_bytes",
             "trace",
             "auto_rebuild",
         ]:
             if key in data:
                 cfg[key] = data[key]
+        
+        # Deep merge for llm_config to preserve defaults for missing fields
+        if "llm_config" in data and isinstance(data["llm_config"], dict):
+            # Ensure llm_config exists in cfg (it should from default)
+            if "llm_config" not in cfg or not isinstance(cfg["llm_config"], dict):
+                cfg["llm_config"] = {}
+            _deep_merge(cfg["llm_config"], data["llm_config"])
+            
     return cfg
 
 
@@ -241,6 +347,7 @@ def _current_project() -> Dict[str, Any] | None:
         "include_globs": list(ui_cfg.get("include_globs") or []),
         "exclude_globs": list(ui_cfg.get("exclude_globs") or []),
         "max_file_bytes": int(ui_cfg.get("max_file_bytes") or 500_000),
+        "hard_limit_bytes": int(ui_cfg.get("hard_limit_bytes") or 100_000_000),
         "trace": {"enabled": False},
         "auto_rebuild": {"enabled": bool((watch or {}).get("enabled", False))},
     }
@@ -514,6 +621,12 @@ def _start_trace_build(repo_root: str, include_globs: Optional[List[str]] = None
     
     def build_task():
         global _trace_index
+        pm = get_progress_manager()
+        task_id = pm.start_task("trace_build", Path(repo_root).name)
+
+        def progress_callback(msg: str, current: int, total: int):
+            pm.update(task_id, msg, current, total)
+
         try:
             builder = TraceBuilder(
                 repo_root=Path(repo_root),
@@ -521,12 +634,14 @@ def _start_trace_build(repo_root: str, include_globs: Optional[List[str]] = None
                 include_globs=include_globs,
                 exclude_globs=exclude_globs,
             )
-            builder.build()
+            builder.build(progress_callback=progress_callback)
             _trace_index = TraceIndex(index_dir)
             _trace_index.load()
             logger.info("Trace build completed successfully")
+            pm.finish_task(task_id, success=True, message="Trace build completed")
         except Exception as e:
             logger.error(f"Trace build failed: {e}")
+            pm.finish_task(task_id, success=False, message=str(e))
     
     _trace_build_thread = threading.Thread(target=build_task, daemon=True)
     _trace_build_thread.start()
@@ -542,6 +657,10 @@ class HealthResponse(BaseModel):
     version: str
 
 
+class ActivateLicenseRequest(BaseModel):
+    key: str
+
+
 class BuildRequest(BaseModel):
     project_root: Optional[str] = None
     repo_root: Optional[str] = None
@@ -549,6 +668,8 @@ class BuildRequest(BaseModel):
     include_globs: Optional[List[str]] = None
     exclude_globs: Optional[List[str]] = None
     max_file_bytes: Optional[int] = None
+    hard_limit_bytes: Optional[int] = None
+    use_gitignore: bool = False
 
 
 class PolicyRequest(BaseModel):
@@ -625,6 +746,91 @@ class LLMModelTestRequest(BaseModel):
     kind: str = "completion"
 
 
+class ModelStatusRequest(BaseModel):
+    provider: str = "ollama"
+    url: str
+    model: str
+    api_key: Optional[str] = None
+    ensure_ready: bool = False
+    timeout_s: int = 120
+
+
+class DetectStackResponse(BaseModel):
+    recommended_globs: List[str]
+    detected_presets: List[str]
+    all_presets: Dict[str, List[str]]
+
+
+# =============================================================================
+# Stack Detection Logic
+# =============================================================================
+
+_STACK_PRESETS = {
+    "Web (JS/TS)": ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx", "**/*.html", "**/*.css", "**/*.json"],
+    "Python": ["**/*.py", "**/*.ipynb"],
+    "iOS (Swift/ObjC)": ["**/*.swift", "**/*.h", "**/*.m", "**/*.mm"],
+    "Rust": ["**/*.rs", "**/*.toml"],
+    "Go": ["**/*.go", "**/*.mod"],
+    "Java/Kotlin": ["**/*.java", "**/*.kt", "**/*.kts", "**/*.gradle"],
+    "C/C++": ["**/*.c", "**/*.cpp", "**/*.h", "**/*.hpp", "**/*.cc"],
+    "C#": ["**/*.cs"],
+    "Ruby": ["**/*.rb"],
+    "PHP": ["**/*.php"],
+    "Shell": ["**/*.sh", "**/*.bash", "**/*.zsh"],
+    "Configuration": ["**/*.yaml", "**/*.yml", "**/*.json", "**/*.toml", "**/*.xml", "**/*.ini", "**/*.env"],
+    "Documentation": ["**/*.md", "**/*.markdown", "**/*.txt"],
+}
+
+# Map extension to preset keys
+_EXT_TO_PRESET = {
+    ".js": "Web (JS/TS)", ".jsx": "Web (JS/TS)", ".ts": "Web (JS/TS)", ".tsx": "Web (JS/TS)", ".html": "Web (JS/TS)", ".css": "Web (JS/TS)",
+    ".py": "Python", ".ipynb": "Python",
+    ".swift": "iOS (Swift/ObjC)", ".m": "iOS (Swift/ObjC)", ".mm": "iOS (Swift/ObjC)",
+    ".rs": "Rust",
+    ".go": "Go",
+    ".java": "Java/Kotlin", ".kt": "Java/Kotlin",
+    ".c": "C/C++", ".cpp": "C/C++", ".h": "C/C++", ".hpp": "C/C++", ".cc": "C/C++",
+    ".cs": "C#",
+    ".rb": "Ruby",
+    ".php": "PHP",
+    ".sh": "Shell", ".bash": "Shell",
+    ".yaml": "Configuration", ".yml": "Configuration", ".json": "Configuration", ".xml": "Configuration", ".toml": "Configuration",
+    ".md": "Documentation",
+}
+
+def _scan_for_presets(root: Path) -> List[str]:
+    """
+    Quickly scan the project root for file extensions to determine active presets.
+    Skips common heavy directories to be fast.
+    """
+    detected_presets = set()
+    # Limit depth and directories to avoid slow scans in huge monorepos
+    ignore_dirs = {
+        ".git", "node_modules", ".venv", "venv", "env", "__pycache__", 
+        "dist", "build", "target", ".next", ".idea", ".vscode", "vendor"
+    }
+    
+    try:
+        # We'll just walk up to 3 levels deep for speed, or until we find enough evidence
+        # Actually, os.walk is fine if we prune
+        import os
+        for dirpath, dirnames, filenames in os.walk(str(root)):
+            # Prune ignored dirs
+            dirnames[:] = [d for d in dirnames if d not in ignore_dirs and not d.startswith(".")]
+            
+            for f in filenames:
+                ext = Path(f).suffix.lower()
+                if ext in _EXT_TO_PRESET:
+                    detected_presets.add(_EXT_TO_PRESET[ext])
+            
+            # Heuristic: stop early if we have found a lot? 
+            # No, keep going to find mixed stacks (e.g. Rust + React)
+            pass
+    except Exception:
+        pass
+        
+    return list(detected_presets)
+
 
 # =============================================================================
 # Index Helpers
@@ -633,26 +839,70 @@ class LLMModelTestRequest(BaseModel):
 def _create_embedder(embedding_source: Optional[str] = None) -> "Embedder":
     """Create the appropriate embedder based on configuration.
 
-    Priority:
-    1. If embedding_source == "ollama" → OllamaEmbedder
-    2. If embedding_source == "native" or None → NativeEmbedder (if deps available)
-    3. Fallback → OllamaEmbedder
+    Priority (highest → lowest):
+    1. Explicit *embedding_source* parameter (project-level override).
+    2. Dashboard ``llm_config.embedding`` settings persisted in ui_config.json.
+    3. CLI ``_config`` values (``--model``, ``--ollama-url``).
+    4. NativeEmbedder (if deps available), else OllamaEmbedder fallback.
     """
-    source = embedding_source or _config.get("embedding_source", "native")
-
-    if source == "ollama":
+    # ── 1. Explicit project-level override ──────────────────────
+    if embedding_source == "ollama":
         ollama_url = _config.get("ollama_url", "http://localhost:11434")
         model = _config.get("model", "nomic-embed-text")
-        logger.info("Using OllamaEmbedder (model=%s, url=%s)", model, ollama_url)
+        logger.info("Using OllamaEmbedder (project override, model=%s, url=%s)", model, ollama_url)
         return OllamaEmbedder(model=model, base_url=ollama_url)
 
-    # Default: try native
+    if embedding_source == "native":
+        native = NativeEmbedder()
+        if native.is_available():
+            logger.info("Using NativeEmbedder (project override)")
+            return native
+
+    # ── 2. Dashboard llm_config (ui_config.json) ────────────────
+    if embedding_source is None:
+        try:
+            ui_cfg = _load_ui_config()
+            emb_cfg = (ui_cfg.get("llm_config") or {}).get("embedding") or {}
+            dash_source = emb_cfg.get("source", "")  # 'endpoint' | 'huggingface'
+
+            if dash_source == "huggingface":
+                native = NativeEmbedder()
+                if native.is_available():
+                    logger.info("Using NativeEmbedder (dashboard: HuggingFace source)")
+                    return native
+                logger.warning("Dashboard set to HuggingFace but NativeEmbedder deps missing")
+
+            elif dash_source == "endpoint":
+                ep_id = emb_cfg.get("endpoint_id", "")
+                dash_model = emb_cfg.get("model", "")
+                if ep_id and dash_model:
+                    # Resolve endpoint URL from saved_endpoints
+                    endpoints = (ui_cfg.get("llm_config") or {}).get("saved_endpoints") or []
+                    ep = next((e for e in endpoints if e.get("id") == ep_id), None)
+                    if ep and ep.get("provider") == "ollama":
+                        ep_url = ep.get("url", "http://localhost:11434")
+                        logger.info(
+                            "Using OllamaEmbedder (dashboard: endpoint=%s, model=%s, url=%s)",
+                            ep_id, dash_model, ep_url,
+                        )
+                        return OllamaEmbedder(model=dash_model, base_url=ep_url)
+        except Exception:
+            logger.debug("Failed to read dashboard embedding config; falling back", exc_info=True)
+
+    # ── 3. CLI _config fallback ─────────────────────────────────
+    cli_source = _config.get("embedding_source", "native")
+    if cli_source == "ollama":
+        ollama_url = _config.get("ollama_url", "http://localhost:11434")
+        model = _config.get("model", "nomic-embed-text")
+        logger.info("Using OllamaEmbedder (cli fallback, model=%s, url=%s)", model, ollama_url)
+        return OllamaEmbedder(model=model, base_url=ollama_url)
+
+    # ── 4. NativeEmbedder default / OllamaEmbedder fallback ─────
     native = NativeEmbedder()
     if native.is_available():
         logger.info("Using NativeEmbedder (nomic-embed-text-v1.5 via ONNX)")
         return native
 
-    # Fallback to Ollama if native deps missing
     logger.warning("NativeEmbedder deps not installed; falling back to OllamaEmbedder")
     ollama_url = _config.get("ollama_url", "http://localhost:11434")
     model = _config.get("model", "nomic-embed-text")
@@ -678,6 +928,8 @@ def _start_build(
     include_globs: Optional[List[str]],
     exclude_globs: Optional[List[str]],
     max_file_bytes: int,
+    hard_limit_bytes: int,
+    use_gitignore: bool = False,
 ) -> bool:
     global _build_thread
 
@@ -687,7 +939,7 @@ def _start_build(
 
         _build_thread = threading.Thread(
             target=_build_worker,
-            args=(repo_root, roots, include_globs, exclude_globs, max_file_bytes),
+            args=(repo_root, roots, include_globs, exclude_globs, max_file_bytes, hard_limit_bytes, use_gitignore),
             daemon=True,
         )
         _build_thread.start()
@@ -701,8 +953,16 @@ def _build_worker(
     include_globs: Optional[List[str]],
     exclude_globs: Optional[List[str]],
     max_file_bytes: int,
+    hard_limit_bytes: int,
+    use_gitignore: bool,
 ):
     global _last_build_result, _last_build_error, _build_thread
+
+    pm = get_progress_manager()
+    task_id = pm.start_task("index_build", Path(repo_root).name)
+
+    def progress_callback(msg: str, current: int, total: int):
+        pm.update(task_id, msg, current, total)
 
     try:
         idx = _get_index()
@@ -712,12 +972,17 @@ def _build_worker(
             include_globs=include_globs,
             exclude_globs=exclude_globs,
             max_file_bytes=max_file_bytes,
+            hard_limit_bytes=hard_limit_bytes,
+            use_gitignore=use_gitignore,
+            progress_callback=progress_callback,
         )
         _last_build_result = meta
         _last_build_error = None
+        pm.finish_task(task_id, success=True, message="Index build completed")
     except Exception as e:
         logger.exception("Build failed")
         _last_build_error = str(e)
+        pm.finish_task(task_id, success=False, message=str(e))
     finally:
         _build_thread = None
 
@@ -745,6 +1010,8 @@ def _start_project_build(
     include_globs: Optional[List[str]],
     exclude_globs: Optional[List[str]],
     max_file_bytes: int,
+    hard_limit_bytes: int,
+    use_gitignore: bool = False,
 ) -> bool:
     with _project_build_lock:
         if _is_project_building(project.id):
@@ -752,7 +1019,7 @@ def _start_project_build(
 
         t = threading.Thread(
             target=_project_build_worker,
-            args=(project, roots, include_globs, exclude_globs, max_file_bytes),
+            args=(project, roots, include_globs, exclude_globs, max_file_bytes, hard_limit_bytes, use_gitignore),
             daemon=True,
         )
         _project_build_threads[project.id] = t
@@ -766,6 +1033,8 @@ def _project_build_worker(
     include_globs: Optional[List[str]],
     exclude_globs: Optional[List[str]],
     max_file_bytes: int,
+    hard_limit_bytes: int,
+    use_gitignore: bool,
 ):
     try:
         idx = _get_project_index(project)
@@ -775,6 +1044,8 @@ def _project_build_worker(
             include_globs=include_globs,
             exclude_globs=exclude_globs,
             max_file_bytes=max_file_bytes,
+            hard_limit_bytes=hard_limit_bytes,
+            use_gitignore=use_gitignore,
         )
         _project_last_build_result[project.id] = meta
         _project_last_build_error.pop(project.id, None)
@@ -807,6 +1078,8 @@ def _start_project_trace_build(
     include_globs: Optional[List[str]] = None,
     exclude_globs: Optional[List[str]] = None,
     max_file_bytes: int = 500_000,
+    hard_limit_bytes: int = 100_000_000,
+    use_gitignore: bool = False,
 ) -> bool:
     with _project_trace_build_lock:
         if _is_project_trace_building(project.id):
@@ -814,7 +1087,7 @@ def _start_project_trace_build(
 
         t = threading.Thread(
             target=_project_trace_build_worker,
-            args=(project, include_globs, exclude_globs, max_file_bytes),
+            args=(project, include_globs, exclude_globs, max_file_bytes, hard_limit_bytes, use_gitignore),
             daemon=True,
         )
         _project_trace_build_threads[project.id] = t
@@ -827,6 +1100,8 @@ def _project_trace_build_worker(
     include_globs: Optional[List[str]],
     exclude_globs: Optional[List[str]],
     max_file_bytes: int,
+    hard_limit_bytes: int,
+    use_gitignore: bool,
 ):
     try:
         idx_dir = project_index_dir(project)
@@ -836,6 +1111,8 @@ def _project_trace_build_worker(
             include_globs=include_globs,
             exclude_globs=exclude_globs,
             max_file_bytes=max_file_bytes,
+            hard_limit_bytes=hard_limit_bytes,
+            use_gitignore=use_gitignore,
         )
         builder.build()
 
@@ -854,6 +1131,115 @@ def _project_trace_build_worker(
 # =============================================================================
 # Health & Info Endpoints
 # =============================================================================
+
+@app.get("/license")
+def get_license_status() -> Dict[str, Any]:
+    """Get current license tier and feature availability."""
+    lic = get_license()
+    features = {}
+    for feat in [
+        "auto_rebuild", "auto_trace", "trace_index", "trace_search",
+        "mcp_tools", "mcp_trace_expand", "path_weights",
+        "clara_compression", "multi_repo_agent", "team_config", "audit_log",
+    ]:
+        features[feat] = check_feature(feat)
+    features["projects_max"] = get_feature_limit("projects_max")
+    return ok({
+        "license": lic.to_dict(),
+        "features": features,
+    })
+
+
+@app.post("/license/activate")
+def activate_license(req: ActivateLicenseRequest) -> Dict[str, Any]:
+    key = str(req.key or "").strip()
+    if not key:
+        raise ApiException(status_code=400, code="VALIDATION_ERROR", message="key is required")
+
+    allowed_tiers = {"free", "starter", "pro", "team", "enterprise"}
+
+    lic_data: Optional[Dict[str, Any]] = None
+
+    tier_guess = key.lower()
+    if tier_guess in allowed_tiers:
+        lic_data = {"tier": tier_guess, "valid": True, "seats": 1, "features": []}
+
+    if lic_data is None:
+        try:
+            parsed = json.loads(key)
+            if isinstance(parsed, dict):
+                lic_data = dict(parsed)
+        except Exception:
+            lic_data = None
+
+    if lic_data is None and "." in key:
+        parts = [p for p in key.split(".") if p]
+        payload_part: Optional[str] = None
+        if len(parts) >= 3:
+            payload_part = parts[1]
+        elif len(parts) == 2:
+            payload_part = parts[0]
+        if payload_part:
+            try:
+                padded = payload_part + "=" * (-len(payload_part) % 4)
+                decoded = base64.urlsafe_b64decode(padded.encode("utf-8")).decode("utf-8")
+                parsed = json.loads(decoded)
+                if isinstance(parsed, dict):
+                    lic_data = dict(parsed)
+            except Exception:
+                lic_data = None
+
+    if lic_data is None:
+        try:
+            padded = key + "=" * (-len(key) % 4)
+            decoded = base64.urlsafe_b64decode(padded.encode("utf-8")).decode("utf-8")
+            parsed = json.loads(decoded)
+            if isinstance(parsed, dict):
+                lic_data = dict(parsed)
+        except Exception:
+            lic_data = None
+
+    if lic_data is None:
+        raise ApiException(
+            status_code=400,
+            code="NOT_IMPLEMENTED",
+            message="License activation exchange is not implemented",
+            hint="Provide a JSON license payload, a tier name (free/starter/pro/team/enterprise), or a token with a base64url JSON payload.",
+        )
+
+    tier_raw = str(lic_data.get("tier") or "").strip().lower()
+    if tier_raw not in allowed_tiers:
+        raise ApiException(
+            status_code=400,
+            code="VALIDATION_ERROR",
+            message="license tier is required",
+        )
+
+    lic_data["tier"] = tier_raw
+    lic_data.setdefault("valid", True)
+    lic_data.setdefault("seats", 1)
+    lic_data.setdefault("features", [])
+
+    license_path = Path.home() / ".codrag" / "license.json"
+    license_path.parent.mkdir(parents=True, exist_ok=True)
+    license_path.write_text(json.dumps(lic_data, indent=2), encoding="utf-8")
+
+    clear_license_cache()
+    return get_license_status()
+
+
+@app.post("/license/deactivate")
+def deactivate_license() -> Dict[str, Any]:
+    license_path = Path.home() / ".codrag" / "license.json"
+    try:
+        if license_path.exists():
+            license_path.unlink()
+    except Exception:
+        raise ApiException(status_code=500, code="IO_ERROR", message="Failed to remove license file")
+
+    clear_license_cache()
+    return get_license_status()
+
 
 @app.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
@@ -902,14 +1288,18 @@ def embedding_status() -> Dict[str, Any]:
             pass
 
     source = _config.get("embedding_source", "native")
+    model_name = str(NativeEmbedder.HF_REPO_ID).split("/")[-1]
     return ok({
+        "available": deps_ok,
+        "model": model_name,
+        "dim": NativeEmbedder.DIM,
+        "downloaded": model_cached,
         "source": source,
         "native_available": deps_ok,
         "model_cached": model_cached,
         "model_path": model_path,
         "hf_repo_id": NativeEmbedder.HF_REPO_ID,
         "onnx_file": NativeEmbedder.ONNX_FILE,
-        "dim": NativeEmbedder.DIM,
     })
 
 
@@ -953,19 +1343,38 @@ def embedding_download() -> Dict[str, Any]:
 @app.get("/clara/status")
 def clara_status() -> Dict[str, Any]:
     """Return CLaRa sidecar server status and model info."""
-    clara_url = str(_config.get("clara_url", ClaraCompressor.DEFAULT_URL))
-    compressor = ClaraCompressor(base_url=clara_url)
+    ui_cfg = _load_ui_config()
+    llm_cfg = ui_cfg.get("llm_config") or {}
+    clara_cfg = llm_cfg.get("clara") or {}
+    enabled = bool(clara_cfg.get("enabled", False))
+    
+    # Priority: 1. remote_url from UI config, 2. CLI arg, 3. Default
+    clara_url = clara_cfg.get("remote_url") or _config.get("clara_url") or ClaraCompressor.DEFAULT_URL
+    
+    compressor = ClaraCompressor(base_url=str(clara_url))
     info = compressor.status()
-    return ok(info)
+    connected = compressor.is_available()
+    if not isinstance(info, dict):
+        info = {}
+    resp = dict(info)
+    resp["enabled"] = enabled
+    resp["url"] = str(clara_url)
+    resp["connected"] = connected
+    return ok(resp)
 
 
 @app.get("/clara/health")
 def clara_health() -> Dict[str, Any]:
     """Quick health check for the CLaRa sidecar."""
-    clara_url = str(_config.get("clara_url", ClaraCompressor.DEFAULT_URL))
-    compressor = ClaraCompressor(base_url=clara_url)
+    ui_cfg = _load_ui_config()
+    llm_cfg = ui_cfg.get("llm_config") or {}
+    clara_cfg = llm_cfg.get("clara") or {}
+    
+    clara_url = clara_cfg.get("remote_url") or _config.get("clara_url") or ClaraCompressor.DEFAULT_URL
+    
+    compressor = ClaraCompressor(base_url=str(clara_url))
     available = compressor.is_available()
-    return ok({"url": clara_url, "available": available})
+    return ok({"url": str(clara_url), "available": available, "healthy": available})
 
 
 # =============================================================================
@@ -995,6 +1404,18 @@ def list_projects() -> Dict[str, Any]:
 def add_project(req: AddProjectRequest) -> Dict[str, Any]:
     if req.mode not in ("standalone", "embedded", "custom"):
         raise ApiException(status_code=400, code="VALIDATION_ERROR", message=f"Invalid mode: {req.mode}")
+
+    # Check project count limit for current tier
+    reg = _get_registry()
+    existing_count = len(reg.list_projects())
+    max_projects = get_feature_limit("projects_max")
+    if existing_count >= max_projects:
+        lic = get_license()
+        raise FeatureGateError(
+            feature="projects_max",
+            current_tier=lic.tier.name.lower(),
+            required_tier="starter" if max_projects <= 1 else "pro",
+        )
 
     p = Path(str(req.path)).expanduser().resolve()
     if not p.exists() or not p.is_dir():
@@ -1026,14 +1447,21 @@ def add_project(req: AddProjectRequest) -> Dict[str, Any]:
                 message=f"Invalid index_path: {e}",
             )
 
+    # Determine defaults based on tier
+    lic = get_license()
+    # Auto-rebuild is enabled by default for Starter tier and above
+    auto_rebuild_default = lic.tier >= 1  # Tier.STARTER = 1
+
     reg = _get_registry()
     default_cfg: Dict[str, Any] = {
         "include_globs": list(_DEFAULT_UI_CONFIG.get("include_globs") or []),
         "exclude_globs": list(_DEFAULT_UI_CONFIG.get("exclude_globs") or []),
         "max_file_bytes": int(_DEFAULT_UI_CONFIG.get("max_file_bytes") or 500_000),
-        "trace": {"enabled": bool((_DEFAULT_UI_CONFIG.get("trace") or {}).get("enabled", False))},
+        "hard_limit_bytes": int(_DEFAULT_UI_CONFIG.get("hard_limit_bytes") or 100_000_000),
+        "trace": {"enabled": True},  # Cross-reference on by default for all tiers
         "auto_rebuild": {
-            "enabled": bool((_DEFAULT_UI_CONFIG.get("auto_rebuild") or {}).get("enabled", False)),
+            "enabled": auto_rebuild_default,
+            "debounce_ms": 5000,
         },
     }
     
@@ -1179,6 +1607,7 @@ def start_project_watch(
     min_gap_ms: int = Query(2000, ge=500, le=30000),
 ) -> Dict[str, Any]:
     """Enable auto-rebuild watcher for a project."""
+    require_feature("auto_rebuild")
     proj = _require_project(project_id)
     idx = _get_project_index(proj)
     
@@ -1188,10 +1617,25 @@ def start_project_watch(
         existing.stop()
     
     def trigger_build(paths: List[str]) -> bool:
-        return _start_project_build(proj) is not None
+        cfg = proj.config or {}
+        include_raw = cfg.get("include_globs") if isinstance(cfg, dict) else None
+        exclude_raw = cfg.get("exclude_globs") if isinstance(cfg, dict) else None
+        include_globs = list(include_raw) if isinstance(include_raw, list) else None
+        exclude_globs = list(exclude_raw) if isinstance(exclude_raw, list) else None
+        max_file_bytes = int((cfg.get("max_file_bytes") or 500_000) if isinstance(cfg, dict) else 500_000)
+        hard_limit_bytes = int((cfg.get("hard_limit_bytes") or 100_000_000) if isinstance(cfg, dict) else 100_000_000)
+
+        started = _start_project_build(proj, None, include_globs, exclude_globs, max_file_bytes, hard_limit_bytes)
+
+        # Also trigger trace rebuild if trace is enabled
+        trace_cfg = cfg.get("trace") if isinstance(cfg, dict) else None
+        if bool((trace_cfg or {}).get("enabled", False)):
+            _start_project_trace_build(proj, include_globs, exclude_globs, max_file_bytes=max_file_bytes, hard_limit_bytes=hard_limit_bytes)
+
+        return started
     
     def is_building() -> bool:
-        return _is_project_building(proj.id)
+        return _is_project_building(proj.id) or _is_project_trace_building(proj.id)
     
     watcher = AutoRebuildWatcher(
         repo_root=Path(proj.path),
@@ -1371,6 +1815,23 @@ def get_project_file_content(project_id: str, path: str = Query(..., min_length=
     )
 
 
+@app.get("/projects/{project_id}/detect-stack")
+def detect_project_stack(project_id: str) -> Dict[str, Any]:
+    """Analyze the project to recommend include patterns."""
+    proj = _require_project(project_id)
+    detected_presets = _scan_for_presets(Path(proj.path))
+    
+    recommended_globs = []
+    for preset in detected_presets:
+        recommended_globs.extend(_STACK_PRESETS.get(preset, []))
+        
+    return ok({
+        "recommended_globs": sorted(list(set(recommended_globs))),
+        "detected_presets": sorted(detected_presets),
+        "all_presets": _STACK_PRESETS,
+    })
+
+
 @app.get("/projects/{project_id}/roots")
 def get_project_roots(project_id: str) -> Dict[str, Any]:
     """Get available root directories for a project."""
@@ -1478,6 +1939,7 @@ def build_project(project_id: str, full: bool = False) -> Dict[str, Any]:
     include_globs = list(include_raw) if isinstance(include_raw, list) else None
     exclude_globs = list(exclude_raw) if isinstance(exclude_raw, list) else None
     max_file_bytes = int((cfg.get("max_file_bytes") or 500_000) if isinstance(cfg, dict) else 500_000)
+    hard_limit_bytes = int((cfg.get("hard_limit_bytes") or 100_000_000) if isinstance(cfg, dict) else 100_000_000)
 
     if proj.mode == "embedded":
         if exclude_globs is None:
@@ -1485,13 +1947,13 @@ def build_project(project_id: str, full: bool = False) -> Dict[str, Any]:
         if "**/.codrag/**" not in exclude_globs:
             exclude_globs.append("**/.codrag/**")
 
-    started = _start_project_build(proj, None, include_globs, exclude_globs, max_file_bytes)
+    started = _start_project_build(proj, None, include_globs, exclude_globs, max_file_bytes, hard_limit_bytes)
     if not started:
         raise ApiException(status_code=409, code="BUILD_ALREADY_RUNNING", message="Build already running")
 
     trace_cfg = cfg.get("trace") if isinstance(cfg, dict) else None
     if bool((trace_cfg or {}).get("enabled", False)):
-        _start_project_trace_build(proj, include_globs, exclude_globs, max_file_bytes=max_file_bytes)
+        _start_project_trace_build(proj, include_globs, exclude_globs, max_file_bytes=max_file_bytes, hard_limit_bytes=hard_limit_bytes)
     return ok({"started": True, "building": True, "build_id": None})
 
 
@@ -1546,6 +2008,9 @@ def _apply_compression(
     if req.compression == "none":
         return {"context": context_str, "compression": None}
 
+    if req.compression == "clara":
+        require_feature("clara_compression")
+
     compressor = _get_compressor(req.compression)
     budget = req.compression_target_chars or req.max_chars
     result = compressor.compress(
@@ -1590,6 +2055,7 @@ def context_project(project_id: str, req: ContextRequest) -> Dict[str, Any]:
     # Resolve trace index for trace expansion
     trace_idx = None
     if req.trace_expand:
+        require_feature("mcp_trace_expand")
         cfg = proj.config or {}
         trace_cfg = cfg.get("trace") if isinstance(cfg, dict) else None
         if bool((trace_cfg or {}).get("enabled", False)):
@@ -2038,14 +2504,17 @@ def get_llm_status() -> Dict[str, Any]:
         connected = False
         models = []
 
-    clara_url = str(_config.get("clara_url", ClaraCompressor.DEFAULT_URL))
-    clara_compressor = ClaraCompressor(base_url=clara_url)
+    ui_cfg = _load_ui_config()
+    clara_cfg = (ui_cfg.get("llm_config") or {}).get("clara") or {}
+    clara_url = clara_cfg.get("remote_url") or _config.get("clara_url") or ClaraCompressor.DEFAULT_URL
+    
+    clara_compressor = ClaraCompressor(base_url=str(clara_url))
     clara_connected = clara_compressor.is_available()
 
     return ok(
         {
             "ollama": {"url": ollama_url, "connected": connected, "models": models},
-            "clara": {"url": clara_url, "connected": clara_connected},
+            "clara": {"url": str(clara_url), "connected": clara_connected},
         }
     )
 
@@ -2062,10 +2531,16 @@ def test_llm() -> Dict[str, Any]:
     except Exception:
         ollama_connected = False
 
+    ui_cfg = _load_ui_config()
+    clara_cfg = (ui_cfg.get("llm_config") or {}).get("clara") or {}
+    clara_url = clara_cfg.get("remote_url") or _config.get("clara_url") or ClaraCompressor.DEFAULT_URL
+    clara_compressor = ClaraCompressor(base_url=str(clara_url))
+    clara_connected = clara_compressor.is_available()
+
     return ok(
         {
             "ollama": {"connected": ollama_connected},
-            "clara": {"connected": False},
+            "clara": {"connected": clara_connected},
         }
     )
 
@@ -2076,7 +2551,10 @@ def proxy_models(req: LLMProxyRequest) -> Dict[str, Any]:
     models: List[str] = []
     
     try:
-        if req.provider == "ollama":
+        if req.provider == "clara":
+            models = ["clara-7b"]
+
+        elif req.provider == "ollama":
             r = requests.get(f"{url}/api/tags", timeout=5)
             if r.status_code == 200:
                 data = r.json()
@@ -2115,7 +2593,17 @@ def proxy_test(req: LLMProxyRequest) -> Dict[str, Any]:
     models: List[str] = []
 
     try:
-        if req.provider == "ollama":
+        if req.provider == "clara":
+            # CLaRa has a simple /health endpoint
+            r = requests.get(f"{url}/health", timeout=5)
+            if r.status_code == 200:
+                success = True
+                message = "Connected to CLaRa Server"
+                models = ["clara-7b"]
+            else:
+                message = f"HTTP {r.status_code}: {r.text[:100]}"
+
+        elif req.provider == "ollama":
             r = requests.get(f"{url}/api/tags", timeout=5)
             if r.status_code == 200:
                 success = True
@@ -2149,32 +2637,159 @@ def proxy_test(req: LLMProxyRequest) -> Dict[str, Any]:
     return ok({"success": success, "message": message, "models": models})
 
 
+@app.post("/api/llm/model-status")
+def model_status_endpoint(req: ModelStatusRequest) -> Dict[str, Any]:
+    """Check model readiness status, optionally triggering preload.
+
+    When ``ensure_ready`` is True the server will attempt to preload
+    the model and block until it is ready (up to ``timeout_s``).
+    """
+    url = req.url.rstrip("/")
+    if req.ensure_ready:
+        result = ensure_model_ready(
+            provider=req.provider,
+            url=url,
+            model=req.model,
+            api_key=req.api_key,
+            timeout_s=req.timeout_s,
+        )
+    else:
+        result = get_model_status(
+            provider=req.provider,
+            url=url,
+            model=req.model,
+            api_key=req.api_key,
+        )
+    return ok(result.to_dict())
+
+
 @app.post("/api/llm/proxy/test-model")
 def proxy_test_model(req: LLMModelTestRequest) -> Dict[str, Any]:
+    """Test a specific model with readiness-aware logic.
+
+    For Ollama models: checks if model is loaded via ``/api/ps`` first.
+    If not loaded, preloads it (up to 120 s) before sending the actual
+    test request.  This prevents false "timed out" errors caused by
+    cold-start model loading.
+    """
     url = req.url.rstrip("/")
     success = False
     message = ""
+    model_status_str = "unknown"
     
     try:
-        if req.provider == "ollama":
-            if req.kind == "embedding":
-                r = requests.post(
-                    f"{url}/api/embeddings",
-                    json={"model": req.model, "prompt": "Test embedding"},
-                    timeout=10
-                )
+        if req.provider == "clara":
+            compressor = ClaraCompressor(base_url=url)
+            if compressor.is_available():
+                success = True
+                message = "CLaRa is responding"
+                model_status_str = ModelStatus.READY.value
             else:
+                message = "CLaRa is not available"
+                model_status_str = ModelStatus.ERROR.value
+
+        elif req.provider == "ollama":
+            if req.kind == "embedding":
+                # Embedding models don't support /api/generate, so we
+                # cannot use ensure_model_ready (which preloads via
+                # /api/generate).  Instead, check basic status first,
+                # then send the embedding request directly — it will
+                # trigger model loading on the Ollama side.
+                readiness = get_model_status(
+                    provider="ollama", url=url, model=req.model,
+                )
+                model_status_str = readiness.status.value
+
+                if readiness.status in (ModelStatus.NOT_FOUND, ModelStatus.ERROR):
+                    message = readiness.message
+                    return ok({
+                        "success": False,
+                        "message": message,
+                        "model_status": model_status_str,
+                    })
+
+                # Model exists — send embedding test (generous timeout
+                # so cold-start loading can complete).
+                try:
+                    r = requests.post(
+                        f"{url}/api/embeddings",
+                        json={"model": req.model, "prompt": "Test embedding"},
+                        timeout=120,
+                    )
+                    if r.status_code == 200:
+                        success = True
+                        load_info = ""
+                        try:
+                            resp_data = r.json()
+                            load_ns = resp_data.get("load_duration", 0)
+                            if load_ns > 0:
+                                load_info = f" (load: {load_ns / 1e9:.1f}s)"
+                        except Exception:
+                            pass
+                        message = f"Model responded successfully{load_info}"
+                        model_status_str = ModelStatus.READY.value
+                    else:
+                        message = f"HTTP {r.status_code}: {r.text[:100]}"
+                except requests.Timeout:
+                    message = f"Model '{req.model}' timed out (may still be loading)"
+                    model_status_str = ModelStatus.LOADING.value
+            else:
+                # ── Readiness gate ──────────────────────────────────
+                # Check if model is loaded before sending a real request.
+                # This avoids the 10-s timeout trap on cold starts.
+                readiness = ensure_model_ready(
+                    provider="ollama",
+                    url=url,
+                    model=req.model,
+                    timeout_s=120,
+                )
+                model_status_str = readiness.status.value
+
+                if readiness.status == ModelStatus.NOT_FOUND:
+                    message = readiness.message
+                    return ok({
+                        "success": False,
+                        "message": message,
+                        "model_status": model_status_str,
+                    })
+
+                if readiness.status == ModelStatus.ERROR:
+                    message = readiness.message
+                    return ok({
+                        "success": False,
+                        "message": message,
+                        "model_status": model_status_str,
+                    })
+
+                if readiness.status == ModelStatus.LOADING:
+                    message = readiness.message
+                    return ok({
+                        "success": False,
+                        "message": message,
+                        "model_status": model_status_str,
+                    })
+
+                # Model is READY — now send the actual test request
+                # with a generous timeout (model is already loaded).
                 r = requests.post(
                     f"{url}/api/generate",
                     json={"model": req.model, "prompt": "Hi", "stream": False},
-                    timeout=10
+                    timeout=30,
                 )
-            
-            if r.status_code == 200:
-                success = True
-                message = "Model responded successfully"
-            else:
-                message = f"HTTP {r.status_code}: {r.text[:100]}"
+                
+                if r.status_code == 200:
+                    success = True
+                    load_info = ""
+                    try:
+                        resp_data = r.json()
+                        load_ns = resp_data.get("load_duration", 0)
+                        if load_ns > 0:
+                            load_info = f" (load: {load_ns / 1e9:.1f}s)"
+                    except Exception:
+                        pass
+                    message = f"Model responded successfully{load_info}"
+                else:
+                    message = f"HTTP {r.status_code}: {r.text[:100]}"
                 
         elif req.provider in ("openai", "openai-compatible"):
             headers = {}
@@ -2188,7 +2803,7 @@ def proxy_test_model(req: LLMModelTestRequest) -> Dict[str, Any]:
                     f"{base}/embeddings",
                     headers=headers,
                     json={"model": req.model, "input": "Test"},
-                    timeout=10
+                    timeout=30,
                 )
             else:
                 r = requests.post(
@@ -2199,293 +2814,239 @@ def proxy_test_model(req: LLMModelTestRequest) -> Dict[str, Any]:
                         "messages": [{"role": "user", "content": "Hi"}],
                         "max_tokens": 5
                     },
-                    timeout=10
+                    timeout=30,
                 )
                 
             if r.status_code == 200:
                 success = True
                 message = "Model responded successfully"
+                model_status_str = ModelStatus.READY.value
             else:
                 message = f"HTTP {r.status_code}: {r.text[:100]}"
 
+    except requests.Timeout:
+        message = "Request timed out — model may still be loading. Try again in a moment."
+        model_status_str = ModelStatus.LOADING.value
     except Exception as e:
         message = str(e)
 
-    return ok({"success": success, "message": message})
+    return ok({"success": success, "message": message, "model_status": model_status_str})
 
 
-@app.get("/api/code-index/config")
-def get_ui_config():
-    return _load_ui_config()
-
-
-@app.put("/api/code-index/config")
-def put_ui_config(data: Dict[str, Any]):
-    cfg = _load_ui_config()
-    for key in [
-        "repo_root",
-        "core_roots",
-        "working_roots",
-        "include_globs",
-        "llm_config",
-        "exclude_globs",
-        "max_file_bytes",
-        "trace",
-        "auto_rebuild",
-    ]:
-        if key in data:
-            cfg[key] = data[key]
-    _save_ui_config(cfg)
-    return cfg
-
-
-@app.get("/api/code-index/mcp-config")
-def mcp_config(
-    request: Request,
-    ide: str = "cursor",
-    mode: str = "auto",
-    project_id: Optional[str] = None,
-    daemon_url: Optional[str] = None,
-):
-    resolved_daemon_url = daemon_url or str(request.base_url).rstrip("/")
-    try:
-        configs = generate_mcp_configs(
-            ide=ide,
-            daemon_url=resolved_daemon_url,
-            codrag_command="codrag",
-            mode=mode,
-            project_id=project_id,
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    if ide == "all":
-        return {"daemon_url": resolved_daemon_url, "configs": configs}
-
-    key = next(iter(configs))
-    return {"daemon_url": resolved_daemon_url, **configs[key]}
-
-
-@app.get("/api/code-index/available-roots")
-def available_roots(repo_root: Optional[str] = None):
-    cfg = _load_ui_config()
-    root = repo_root or str(cfg.get("repo_root") or "") or _config.get("repo_root")
-    if not root:
-        raise HTTPException(status_code=400, detail="repo_root is required")
-
-    project_root = Path(root).resolve()
-    if not project_root.exists() or not project_root.is_dir():
-        raise HTTPException(status_code=400, detail=f"repo_root not found: {project_root}")
-
-    roots: List[str] = []
+@app.post("/api/code-index/context", deprecated=True)
+def context(req: ContextRequest, response: Response):
+    """Get assembled context for LLM injection.
     
-    # Generic discovery: list all top-level directories except ignored ones
-    ignore = {".git", ".venv", "node_modules", "__pycache__", ".next", "dist", "build", ".codrag", ".idea", ".vscode"}
-    try:
-        for item in sorted(project_root.iterdir()):
-            if not item.is_dir():
-                continue
-            if item.name.startswith("."):
-                continue
-            if item.name in ignore:
-                continue
-            roots.append(item.name)
-    except Exception:
-        pass
-
-    return {"roots": roots}
-
-
-# =============================================================================
-# Code Index API (Working Endpoints)
-# =============================================================================
-
-@app.get("/api/code-index/status")
-def status():
-    """Get index status and build state."""
-    idx = _get_index()
-    return {
-        "index": idx.stats(),
-        "building": _is_building(),
-        "last_build": _last_build_result,
-        "last_error": _last_build_error,
-        "watch": _watcher.status() if _watcher is not None else {"enabled": False, "state": "disabled"},
-        "context_defaults": {
-            "k": 5,
-            "max_chars": 6000,
-        },
-        "config": {
-            "repo_root": _config.get("repo_root"),
-            "index_dir": _config.get("index_dir"),
-            "ollama_url": _config.get("ollama_url"),
-            "model": _config.get("model"),
-        },
-    }
-
-
-@app.post("/api/code-index/build")
-def build(req: BuildRequest):
-    """Start an async index build."""
-
-    ui_cfg = _load_ui_config()
-    repo_root = req.repo_root or req.project_root or str(ui_cfg.get("repo_root") or "") or _config.get("repo_root")
-    if not repo_root:
-        raise HTTPException(status_code=400, detail="repo_root is required")
-
-    roots = req.roots
-    if roots is None:
-        combined = list(ui_cfg.get("core_roots") or []) + list(ui_cfg.get("working_roots") or [])
-        roots = combined or None
-
-    include_globs = req.include_globs if req.include_globs is not None else (ui_cfg.get("include_globs") or None)
-    exclude_globs = req.exclude_globs if req.exclude_globs is not None else (ui_cfg.get("exclude_globs") or None)
-    max_file_bytes = int(req.max_file_bytes) if req.max_file_bytes is not None else int(ui_cfg.get("max_file_bytes") or 500_000)
-
-    started = _start_build(repo_root, roots, include_globs, exclude_globs, max_file_bytes)
-    if not started:
-        return {"started": False, "building": True}
-    return {"started": True}
-
-
-@app.get("/api/code-index/profile")
-def profile(repo_root: Optional[str] = None):
-    """Profile a repo to recommend include/exclude patterns and retrieval roles."""
-    root = repo_root or _config.get("repo_root")
-    if not root:
-        raise HTTPException(status_code=400, detail="repo_root is required")
-
-    return profile_repo(Path(root))
-
-
-@app.post("/api/code-index/policy")
-def policy(req: PolicyRequest):
-    """Get (and optionally regenerate) the persisted repo policy for this index."""
-    root = req.repo_root or _config.get("repo_root")
-    if not root:
-        raise HTTPException(status_code=400, detail="repo_root is required")
-
-    idx = _get_index()
-    pol = ensure_repo_policy(idx.index_dir, Path(root), force=req.force)
-    return {"policy": pol}
-
-
-def _ensure_watcher(repo_root: str, debounce_ms: Optional[int], min_gap_ms: Optional[int]) -> AutoRebuildWatcher:
-    global _watcher
-
-    idx = _get_index()
-    root_path = Path(repo_root)
-
-    def _trigger(_paths: List[str]) -> bool:
-        ui_cfg = _load_ui_config()
-        combined = list(ui_cfg.get("core_roots") or []) + list(ui_cfg.get("working_roots") or [])
-        roots = combined or None
-
-        include_globs = ui_cfg.get("include_globs") or None
-        exclude_globs = ui_cfg.get("exclude_globs") or None
-        max_file_bytes = int(ui_cfg.get("max_file_bytes") or 500_000)
-
-        return _start_build(repo_root, roots, include_globs, exclude_globs, max_file_bytes)
-
-    if _watcher is None:
-        _watcher = AutoRebuildWatcher(
-            repo_root=root_path,
-            index_dir=idx.index_dir,
-            on_trigger_build=_trigger,
-            is_building=_is_building,
-            debounce_ms=int(debounce_ms) if debounce_ms is not None else 5000,
-            min_rebuild_gap_ms=int(min_gap_ms) if min_gap_ms is not None else 2000,
-        )
-        return _watcher
-
-    return _watcher
-
-
-@app.get("/api/code-index/watch/status")
-def watch_status(repo_root: Optional[str] = None):
-    root = repo_root or _config.get("repo_root")
-    if not root:
-        raise HTTPException(status_code=400, detail="repo_root is required")
-
-    if _watcher is None:
-        return {"watch": {"enabled": False, "state": "disabled"}}
-    return {"watch": _watcher.status()}
-
-
-@app.post("/api/code-index/watch/start")
-def watch_start(req: WatchRequest):
-    root = req.repo_root or _config.get("repo_root")
-    if not root:
-        raise HTTPException(status_code=400, detail="repo_root is required")
-
-    w = _ensure_watcher(root, req.debounce_ms, req.min_rebuild_gap_ms)
-    w.start()
-    return {"watch": w.status()}
-
-
-@app.post("/api/code-index/watch/stop")
-def watch_stop():
-    global _watcher
-
-    if _watcher is None:
-        return {"watch": {"enabled": False, "state": "disabled"}}
-    _watcher.stop()
-    return {"watch": _watcher.status()}
-
-
-@app.post("/api/code-index/search")
-def search(req: SearchRequest):
-    """Search the index."""
+    DEPRECATED: Use POST /projects/{project_id}/context instead.
+    This endpoint uses a global singleton index and does not support multi-project.
+    """
+    response.headers["Deprecation"] = "true"
+    response.headers["Sunset"] = "2026-06-01"
+    response.headers["Link"] = '</projects/{project_id}/context>; rel="successor-version"'
+    logger.warning("DEPRECATED: /api/code-index/context called - migrate to /projects/{id}/context")
+    
     if not req.query.strip():
         raise HTTPException(status_code=400, detail="query is required")
 
     idx = _get_index()
-    policy = idx.query_policy(req.query)
-    results = idx.search(req.query, k=req.k, min_score=req.min_score)
-
-    return {
-        "results": [
-            {"doc": r.doc, "score": r.score}
-            for r in results
-        ],
-        "meta": {"query": req.query, "policy": policy},
-    }
-
-
-@app.post("/api/code-index/context")
-def context(req: ContextRequest):
-    """Get assembled context for LLM injection."""
-    if not req.query.strip():
-        raise HTTPException(status_code=400, detail="query is required")
-
-    idx = _get_index()
+    
+    # 1. Retrieve Context
     if req.structured:
-        return idx.get_context_structured(
+        # Structured result (chunks list)
+        data = idx.get_context_structured(
             req.query,
             k=req.k,
             max_chars=req.max_chars,
             min_score=req.min_score,
         )
+        ctx_text = data["context"]
+    else:
+        # Plain text result
+        policy = idx.query_policy(req.query)
+        ctx_text = idx.get_context(
+            req.query,
+            k=req.k,
+            max_chars=req.max_chars,
+            include_sources=req.include_sources,
+            include_scores=req.include_scores,
+            min_score=req.min_score,
+        )
+        data = {"context": ctx_text, "meta": {"query": req.query, "policy": policy}}
 
-    policy = idx.query_policy(req.query)
-    ctx = idx.get_context(
-        req.query,
-        k=req.k,
-        max_chars=req.max_chars,
-        include_sources=req.include_sources,
-        include_scores=req.include_scores,
-        min_score=req.min_score,
-    )
-    return {"context": ctx, "meta": {"query": req.query, "policy": policy}}
+    # 2. Trace Expansion (if requested)
+    if req.trace_expand and _trace_index:
+        try:
+            # Ensure trace index is loaded
+            if not _trace_index.is_loaded():
+                _trace_index.load()
+            
+            # Use trace expansion for structured results
+            result = idx.get_context_with_trace_expansion(
+                req.query,
+                trace_index=_trace_index,
+                k=req.k,
+                max_chars=req.max_chars,
+                min_score=req.min_score,
+                max_additional_chars=req.trace_max_chars,
+            )
+            ctx_text = str(result.get("context") or "")
+            data = {
+                "context": ctx_text,
+                "chunks": result.get("chunks", []),
+                "trace_expanded": result.get("trace_expanded", False),
+                "trace_nodes_added": result.get("trace_nodes_added", 0),
+            }
+            if "meta" not in data:
+                data["meta"] = {"query": req.query}
+        except Exception:
+            pass  # Graceful fallback: use non-expanded context
+
+    # 3. Compression (CLaRa)
+    if req.compression == "clara" and ctx_text:
+        ui_cfg = _load_ui_config()
+        clara_cfg = (ui_cfg.get("llm_config") or {}).get("clara") or {}
+        clara_url = clara_cfg.get("remote_url") or _config.get("clara_url") or ClaraCompressor.DEFAULT_URL
+        
+        compressor = ClaraCompressor(base_url=str(clara_url), timeout_s=req.compression_timeout_s)
+        
+        # Calculate budget if not explicit
+        budget = req.compression_target_chars
+        if not budget:
+            # Default to 50% of max_chars or length? 
+            # Usually we want to fit into LLM context. 
+            # If max_chars was high (e.g. 20k) and we want to fit in 4k...
+            # For now, let CLaRa decide (budget=0) or use defaults.
+            budget = 0
+            
+        res = compressor.compress(
+            ctx_text,
+            query=req.query,
+            budget_chars=budget or 0,
+            level=req.compression_level
+        )
+        
+        data["context"] = res.compressed
+        if "meta" not in data:
+            data["meta"] = {}
+        data["meta"]["compression"] = {
+            "provider": "clara",
+            "original_chars": res.input_chars,
+            "compressed_chars": res.output_chars,
+            "ratio": res.compression_ratio,
+            "time_ms": res.timing_ms,
+            "error": res.error
+        }
+
+    return ok(data)
 
 
-@app.post("/api/code-index/chunk")
-def chunk(req: ChunkRequest):
-    """Get a specific chunk by ID."""
+@app.post("/api/code-index/chunk", deprecated=True)
+def chunk(req: ChunkRequest, response: Response):
+    """Get a specific chunk by ID.
+    
+    DEPRECATED: Use POST /projects/{project_id}/search instead.
+    This endpoint uses a global singleton index and does not support multi-project.
+    """
+    response.headers["Deprecation"] = "true"
+    response.headers["Sunset"] = "2026-06-01"
+    logger.warning("DEPRECATED: /api/code-index/chunk called - migrate to /projects/{id}/search")
+    
     idx = _get_index()
     doc = idx.get_chunk(req.chunk_id)
     if doc is None:
         raise HTTPException(status_code=404, detail="Chunk not found")
-    return {"chunk": doc}
+    return ok({"chunk": doc})
+
+
+@app.get("/api/code-index/mcp-config")
+def get_mcp_config(
+    request: Request,
+    ide: str = Query("all"),
+    mode: str = Query("auto"),
+    daemon_url: Optional[str] = Query(None),
+    project_id: Optional[str] = Query(None),
+    project: Optional[str] = Query(None),
+) -> Dict[str, Any]:
+    effective_daemon_url = str(daemon_url).strip() if daemon_url else str(request.base_url).rstrip("/")
+    effective_project_id = project_id or project
+
+    try:
+        configs = generate_mcp_configs(
+            ide=str(ide).strip().lower(),
+            daemon_url=effective_daemon_url,
+            mode=str(mode).strip().lower(),
+            project_id=effective_project_id,
+        )
+    except ValueError as e:
+        raise ApiException(status_code=400, code="VALIDATION_ERROR", message=str(e))
+
+    norm_ide = str(ide).strip().lower() if ide else "all"
+    if norm_ide == "all":
+        return ok({"daemon_url": effective_daemon_url, "configs": configs})
+
+    entry = configs.get(norm_ide)
+    if entry is None:
+        raise ApiException(status_code=400, code="VALIDATION_ERROR", message=f"Unknown IDE: {ide}")
+
+    payload = {"daemon_url": effective_daemon_url, **entry}
+    return ok(payload)
+
+
+@app.get("/api/code-index/config", deprecated=True)
+def get_global_config(response: Response) -> Dict[str, Any]:
+    """Get global UI configuration.
+    
+    DEPRECATED: This is a global config endpoint that does not support multi-project.
+    Consider using project-specific configuration via /projects/{project_id}/config.
+    """
+    response.headers["Deprecation"] = "true"
+    response.headers["Sunset"] = "2026-06-01"
+    logger.warning("DEPRECATED: GET /api/code-index/config called")
+    return ok(_load_ui_config())
+
+
+@app.put("/api/code-index/config", deprecated=True)
+async def update_global_config(req: Request, response: Response) -> Dict[str, Any]:
+    """Update global UI configuration (merge update).
+    
+    DEPRECATED: This is a global config endpoint that does not support multi-project.
+    Consider using project-specific configuration via /projects/{project_id}/config.
+    """
+    response.headers["Deprecation"] = "true"
+    response.headers["Sunset"] = "2026-06-01"
+    logger.warning("DEPRECATED: PUT /api/code-index/config called")
+    
+    try:
+        data = await req.json()
+    except Exception:
+        raise ApiException(status_code=400, code="INVALID_JSON", message="Invalid JSON body")
+
+    if not isinstance(data, dict):
+        raise ApiException(status_code=400, code="VALIDATION_ERROR", message="Config must be a JSON object")
+
+    current = _load_ui_config()
+
+    # Detect if embedding config changed — if so, invalidate cached indexes
+    # so the next build/search creates a fresh embedder from new settings.
+    old_emb = (current.get("llm_config") or {}).get("embedding") or {}
+    new_emb = (data.get("llm_config") or {}).get("embedding") or {}
+    embedding_changed = new_emb and (
+        new_emb.get("source") != old_emb.get("source")
+        or new_emb.get("endpoint_id") != old_emb.get("endpoint_id")
+        or new_emb.get("model") != old_emb.get("model")
+    )
+
+    # Use deep merge to prevent overwriting nested keys with partial updates
+    _deep_merge(current, data)
+    _save_ui_config(current)
+
+    if embedding_changed:
+        global _index
+        _index = None
+        _project_indexes.clear()
+        logger.info("Embedding config changed — cleared cached indexes")
+
+    return ok(current)
 
 
 # =============================================================================

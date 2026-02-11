@@ -548,6 +548,72 @@ Combines health stats, activity heatmap, and trace statistics.
 
 ---
 
+### `codrag drift`
+
+Show index drift report (stale files, freshness metrics).
+
+```bash
+codrag drift [OPTIONS]
+```
+
+**Options:**
+
+| Option | Short | Default | Description |
+|--------|-------|---------|-------------|
+| `--project` | `-p` | auto | Project ID |
+
+Shows which files have drifted since the last index build.
+
+---
+
+### `codrag flow`
+
+Show RAG flow visualization (query → retrieval → context).
+
+```bash
+codrag flow [OPTIONS]
+```
+
+**Options:**
+
+| Option | Short | Default | Description |
+|--------|-------|---------|-------------|
+| `--project` | `-p` | auto | Project ID |
+
+Visualizes the RAG pipeline: embedding, search, context assembly.
+
+---
+
+### `codrag config`
+
+View or modify CoDRAG configuration.
+
+```bash
+codrag config [KEY] [VALUE] [OPTIONS]
+```
+
+**Arguments:**
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `KEY` | No | Config key (dot-notation, e.g. `llm_config.embedding.source`) |
+| `VALUE` | No | Value to set |
+
+**Examples:**
+
+```bash
+# Show full config
+codrag config
+
+# Get specific key
+codrag config llm_config.embedding.source
+
+# Set specific key
+codrag config llm_config.embedding.source huggingface
+```
+
+---
+
 ## Project Resolution
 
 Many commands accept an optional `PROJECT_ID` argument. When omitted, CoDRAG resolves the project automatically:
@@ -572,11 +638,27 @@ codrag build abc123 # Must specify project ID
 
 ## Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| `CODRAG_HOST` | Default server host (overrides `127.0.0.1`) |
-| `CODRAG_PORT` | Default server port (overrides `8400`) |
-| `CODRAG_DATA_DIR` | Data directory for standalone indexes |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CODRAG_HOST` | `127.0.0.1` | Default server host |
+| `CODRAG_PORT` | `8400` | Default server port |
+| `CODRAG_DATA_DIR` | `~/.local/share/codrag` | Data directory for standalone indexes |
+| `CODRAG_ENGINE` | `auto` | Indexing engine: `auto`, `rust`, or `python` |
+| `CODRAG_TIER` | (from license) | Override license tier: `free`, `starter`, `pro`, `team`, `enterprise` |
+| `OLLAMA_HOST` | `http://localhost:11434` | Ollama server URL (standard Ollama env var) |
+
+**Examples:**
+
+```bash
+# Use Python engine for debugging
+CODRAG_ENGINE=python codrag serve
+
+# Test Pro features locally
+CODRAG_TIER=pro codrag serve
+
+# Use custom Ollama server
+OLLAMA_HOST=http://192.168.1.100:11434 codrag serve
+```
 
 ---
 

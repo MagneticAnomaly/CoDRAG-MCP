@@ -22,6 +22,7 @@ export interface AIModelsSettingsProps {
   // Model operations
   onFetchModels: (endpointId: string) => Promise<string[]>;
   onTestModel: (slotType: 'embedding' | 'small' | 'large' | 'clara') => Promise<EndpointTestResult>;
+  onClearTestResult?: (slot: string) => void;
   
   // HuggingFace operations
   onHFDownload: (slotType: 'embedding' | 'clara') => void;
@@ -38,8 +39,8 @@ export interface AIModelsSettingsProps {
 // Recommended models per slot
 const RECOMMENDED_MODELS: Record<string, string[]> = {
   embedding: ['nomic-embed-text'],
-  small: ['qwen3:4b', 'phi3:mini', 'phi-3-mini'],
-  large: ['mistral', 'qwen3:30b', 'deepseek-coder'],
+  small: ['ministral-3:3b', 'qwen2.5:3b', 'phi3:mini'],
+  large: ['ministral-3:8b', 'ministral-3:14b', 'mistral-nemo', 'qwen2.5:14b', 'deepseek-coder-v2'],
 };
 
 /** Check if a model name matches an entry in the available list (handles ':latest' suffix) */
@@ -71,6 +72,7 @@ export function AIModelsSettings({
   onTestEndpoint,
   onFetchModels,
   onTestModel,
+  onClearTestResult,
   onHFDownload,
   availableModels = {},
   loadingModels = {},
@@ -80,6 +82,7 @@ export function AIModelsSettings({
 }: AIModelsSettingsProps) {
   
   const handleEmbeddingSourceChange = (source: ModelSource) => {
+    onClearTestResult?.('embedding');
     onConfigChange({
       ...config,
       embedding: { ...config.embedding, source },
@@ -87,6 +90,7 @@ export function AIModelsSettings({
   };
   
   const handleEmbeddingEndpointChange = async (endpointId: string) => {
+    onClearTestResult?.('embedding');
     if (!endpointId || endpointId === '__disconnect__') {
       onConfigChange({
         ...config,
@@ -109,6 +113,7 @@ export function AIModelsSettings({
   };
   
   const handleEmbeddingModelChange = (model: string) => {
+    onClearTestResult?.('embedding');
     onConfigChange({
       ...config,
       embedding: { ...config.embedding, model },
@@ -116,6 +121,7 @@ export function AIModelsSettings({
   };
   
   const handleSmallModelEndpointChange = async (endpointId: string) => {
+    onClearTestResult?.('small');
     if (!endpointId || endpointId === '__disconnect__') {
       onConfigChange({
         ...config,
@@ -127,24 +133,20 @@ export function AIModelsSettings({
       ...config,
       small_model: { ...config.small_model, endpoint_id: endpointId, model: undefined, enabled: true },
     });
-    const models = await onFetchModels(endpointId);
-    const suggested = findRecommended('small', models);
-    if (suggested) {
-      onConfigChange({
-        ...config,
-        small_model: { ...config.small_model, endpoint_id: endpointId, model: suggested, enabled: true },
-      });
-    }
+    // Fetch models for the dropdown but don't auto-select — user must choose
+    void onFetchModels(endpointId);
   };
   
   const handleSmallModelChange = (model: string) => {
+    onClearTestResult?.('small');
     onConfigChange({
       ...config,
-      small_model: { ...config.small_model, model },
+      small_model: { ...config.small_model, model, enabled: true },
     });
   };
   
   const handleLargeModelEndpointChange = async (endpointId: string) => {
+    onClearTestResult?.('large');
     if (!endpointId || endpointId === '__disconnect__') {
       onConfigChange({
         ...config,
@@ -156,32 +158,51 @@ export function AIModelsSettings({
       ...config,
       large_model: { ...config.large_model, endpoint_id: endpointId, model: undefined, enabled: true },
     });
-    const models = await onFetchModels(endpointId);
-    const suggested = findRecommended('large', models);
-    if (suggested) {
-      onConfigChange({
-        ...config,
-        large_model: { ...config.large_model, endpoint_id: endpointId, model: suggested, enabled: true },
-      });
-    }
+    // Fetch models for the dropdown but don't auto-select — user must choose
+    void onFetchModels(endpointId);
   };
   
   const handleLargeModelChange = (model: string) => {
+    onClearTestResult?.('large');
     onConfigChange({
       ...config,
-      large_model: { ...config.large_model, model },
+      large_model: { ...config.large_model, model, enabled: true },
     });
   };
   
   const handleClaraSourceChange = (source: ModelSource) => {
+    onClearTestResult?.('clara');
     onConfigChange({
       ...config,
       clara: { ...config.clara, source },
     });
   };
 
+  const handleClaraEndpointChange = (endpointId: string) => {
+    onClearTestResult?.('clara');
+    if (!endpointId || endpointId === '__disconnect__') {
+      onConfigChange({
+        ...config,
+        clara: { ...config.clara, endpoint_id: undefined, remote_url: undefined },
+      });
+      return;
+    }
+    const ep = config.saved_endpoints.find(e => e.id === endpointId);
+    onConfigChange({
+      ...config,
+      clara: { 
+        ...config.clara, 
+        endpoint_id: endpointId,
+        remote_url: ep?.url,
+        enabled: true
+      },
+    });
+  };
+
   // Determine status for each slot
   const getEmbeddingStatus = () => {
+    // A successful test result always means connected
+    if (testResults['embedding']?.success) return 'connected';
     if (config.embedding.source === 'huggingface') {
       if (config.embedding.hf_download_progress !== undefined && config.embedding.hf_download_progress < 1) {
         return 'downloading';
@@ -190,18 +211,22 @@ export function AIModelsSettings({
     }
     if (!config.embedding.endpoint_id || !config.embedding.model) return 'not-configured';
     const epModels = availableModels[config.embedding.endpoint_id] || [];
-    if (epModels.length === 0) return 'not-configured';
+    if (epModels.length === 0) return 'loading';
     return modelInList(config.embedding.model, epModels) ? 'connected' : 'disconnected';
   };
   
-  const getSlotStatus = (slot: { enabled: boolean; endpoint_id?: string; model?: string }) => {
-    if (!slot.enabled || !slot.endpoint_id || !slot.model) return 'not-configured';
+  const getSlotStatus = (slot: { enabled: boolean; endpoint_id?: string; model?: string }, slotKey: string) => {
+    // A successful test result always means connected
+    if (testResults[slotKey]?.success) return 'connected';
+    if (!slot.endpoint_id || !slot.model) return 'not-configured';
     const epModels = availableModels[slot.endpoint_id] || [];
-    if (epModels.length === 0) return 'not-configured';
+    if (epModels.length === 0) return 'loading';
     return modelInList(slot.model, epModels) ? 'connected' : 'disconnected';
   };
   
   const getClaraStatus = () => {
+    // A successful test result always means connected
+    if (testResults['clara']?.success) return 'connected';
     if (!config.clara.enabled) return 'not-configured';
     if (config.clara.source === 'huggingface') {
       if (config.clara.hf_download_progress !== undefined && config.clara.hf_download_progress < 1) {
@@ -209,6 +234,7 @@ export function AIModelsSettings({
       }
       return config.clara.hf_downloaded ? 'connected' : 'not-configured';
     }
+    // For endpoint source, check if we have a URL
     return config.clara.remote_url ? 'connected' : 'not-configured';
   };
 
@@ -225,7 +251,7 @@ export function AIModelsSettings({
 
       {/* Model Cards Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Embedding Model */}
+        {/* Embedding Model (Top Left) */}
         <ModelCard
           title="Embedding Model"
           description="Vector encoding for semantic search"
@@ -255,33 +281,65 @@ export function AIModelsSettings({
           testingConnection={testingSlot === 'embedding'}
         />
 
-        {/* Small Model */}
+        {/* Fast Model (Top Right) */}
+        <div className="flex flex-col h-full">
+           <ModelCard
+            title="Single / Fast Model"
+            description="Fast analysis & parsing"
+            icon={
+              <svg className="w-5 h-5 text-warning" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            }
+            info="Use a single powerful model here (like Claude/GPT) to handle both Fast and Thinking tasks, or combine a smaller local model with a larger one below."
+            infoLink="https://codrag.dev/docs/guides/models"
+            endpoint={config.small_model.endpoint_id}
+            model={config.small_model.model}
+            endpoints={config.saved_endpoints}
+            onEndpointChange={handleSmallModelEndpointChange}
+            availableModels={availableModels[config.small_model.endpoint_id || ''] || []}
+            onModelChange={handleSmallModelChange}
+            onRefreshModels={() => config.small_model.endpoint_id && onFetchModels(config.small_model.endpoint_id)}
+            loadingModels={loadingModels[config.small_model.endpoint_id || '']}
+            status={getSlotStatus(config.small_model, 'small')}
+            onTest={() => onTestModel('small')}
+            testResult={testResults['small']}
+            testingConnection={testingSlot === 'small'}
+            className="flex-grow"
+          />
+        </div>
+
+        {/* CLaRa Model (Bottom Left) */}
         <ModelCard
-          title="Small Model"
-          description="Fast analysis & parsing (4B)"
+          title="CLaRa (Compression)"
+          description="16x context compression (optional)"
           icon={
-            <svg className="w-5 h-5 text-warning" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            <svg className="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
             </svg>
           }
-          endpoint={config.small_model.endpoint_id}
-          model={config.small_model.model}
+          source={config.clara.source}
+          endpoint={config.clara.endpoint_id}
           endpoints={config.saved_endpoints}
-          onEndpointChange={handleSmallModelEndpointChange}
-          availableModels={availableModels[config.small_model.endpoint_id || ''] || []}
-          onModelChange={handleSmallModelChange}
-          onRefreshModels={() => config.small_model.endpoint_id && onFetchModels(config.small_model.endpoint_id)}
-          loadingModels={loadingModels[config.small_model.endpoint_id || '']}
-          status={getSlotStatus(config.small_model)}
-          onTest={() => onTestModel('small')}
-          testResult={testResults['small']}
-          testingConnection={testingSlot === 'small'}
+          onEndpointChange={handleClaraEndpointChange}
+          hideModelSelector={true}
+          hfEnabled={true}
+          hfRepoId="apple/CLaRa-7B-Instruct"
+          hfDownloaded={config.clara.hf_downloaded}
+          hfDownloadProgress={config.clara.hf_download_progress}
+          onHFDownload={() => onHFDownload('clara')}
+          onSourceChange={handleClaraSourceChange}
+          status={getClaraStatus()}
+          onTest={() => onTestModel('clara')}
+          testResult={testResults['clara']}
+          testingConnection={testingSlot === 'clara'}
         />
 
-        {/* Large Model */}
+        {/* Thinking Model (Bottom Right) */}
         <ModelCard
-          title="Large Model"
-          description="Complex reasoning & summaries"
+          title="Thinking Model"
+          description="Complex reasoning & summaries (Optional)"
+          disabled={!config.small_model.model}
           icon={
             <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
@@ -295,34 +353,10 @@ export function AIModelsSettings({
           onModelChange={handleLargeModelChange}
           onRefreshModels={() => config.large_model.endpoint_id && onFetchModels(config.large_model.endpoint_id)}
           loadingModels={loadingModels[config.large_model.endpoint_id || '']}
-          status={getSlotStatus(config.large_model)}
+          status={getSlotStatus(config.large_model, 'large')}
           onTest={() => onTestModel('large')}
           testResult={testResults['large']}
           testingConnection={testingSlot === 'large'}
-        />
-
-        {/* CLaRa Model */}
-        <ModelCard
-          title="CLaRa (Compression)"
-          description="16x context compression (optional)"
-          icon={
-            <svg className="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-            </svg>
-          }
-          source={config.clara.source}
-          endpoint={config.clara.remote_url}
-          endpoints={[]} // CLaRa uses direct URL, not saved endpoints
-          hfEnabled={true}
-          hfRepoId="apple/CLaRa-7B-Instruct"
-          hfDownloaded={config.clara.hf_downloaded}
-          hfDownloadProgress={config.clara.hf_download_progress}
-          onHFDownload={() => onHFDownload('clara')}
-          onSourceChange={handleClaraSourceChange}
-          status={getClaraStatus()}
-          onTest={() => onTestModel('clara')}
-          testResult={testResults['clara']}
-          testingConnection={testingSlot === 'clara'}
         />
       </div>
 
@@ -342,8 +376,12 @@ export function AIModelsSettings({
           <h4 className="text-sm font-semibold mb-2 text-text">Model Recommendations</h4>
           <ul className="text-xs text-text-muted space-y-1.5 list-disc pl-4">
             <li><strong>Embedding:</strong> nomic-embed-text (via Ollama or HuggingFace download)</li>
-            <li><strong>Small:</strong> qwen3:4b-instruct, phi-3-mini for fast parsing</li>
-            <li><strong>Large:</strong> mistral, qwen3:30b, deepseek-coder for complex analysis</li>
+            <li>
+              <strong>Small:</strong> <a href="https://ollama.com/library/ministral-3" target="_blank" rel="noreferrer" className="text-primary hover:underline">ministral-3:3b</a>, qwen2.5:3b for fast parsing
+            </li>
+            <li>
+              <strong>Large:</strong> <a href="https://ollama.com/library/ministral-3" target="_blank" rel="noreferrer" className="text-primary hover:underline">ministral-3:8b</a>, mistral-nemo, deepseek-coder-v2 for complex analysis
+            </li>
             <li><strong>CLaRa:</strong> Optional - enables 16x context compression for large codebases</li>
           </ul>
         </div>

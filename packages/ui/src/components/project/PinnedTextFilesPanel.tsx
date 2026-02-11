@@ -6,6 +6,7 @@ import { CopyButton } from '../context/CopyButton';
 import { ProjectTabs } from '../navigation/ProjectTabs';
 import type { ProjectTab } from '../navigation/ProjectTabs';
 import { EmptyState } from '../patterns/EmptyState';
+import { CodeViewer } from './CodeViewer';
 
 export interface PinnedTextFile {
   id: string;
@@ -80,15 +81,13 @@ export function PinnedTextFilesPanel({
             onTabSelect={setActiveFileId}
             onTabClose={onUnpin}
           />
-
-          <div className="flex-1 min-h-0 bg-surface-raised border border-border rounded-lg overflow-hidden flex flex-col">
-            <div className="px-3 py-2 border-b border-border text-xs font-mono text-text truncate">
-              {activeFile?.path}
-            </div>
-            <pre className="flex-1 min-h-0 p-4 text-xs whitespace-pre-wrap font-mono text-text overflow-y-auto custom-scrollbar">
-              {activeFile?.content ?? ''}
-            </pre>
-          </div>
+          
+          {activeFile && (
+            <CodeViewer 
+              content={activeFile.content}
+              path={activeFile.path}
+            />
+          )}
         </div>
       )}
     </Container>

@@ -1,3 +1,5 @@
+import { Image as ImageIcon } from 'lucide-react';
+
 export default function Page() {
   return (
     <main className="min-h-screen bg-background text-text">
@@ -53,9 +55,24 @@ export default function Page() {
           <h3 className="mt-6 text-lg font-medium">Via API</h3>
           <div className="mt-2 rounded-lg bg-surface border border-border p-4 font-mono text-sm overflow-x-auto">
             <div className="text-text-muted"># Check embedding status</div>
-            <div>curl http://localhost:4966/embedding/status</div>
+            <div>curl http://localhost:8400/embedding/status</div>
             <div className="mt-3 text-text-muted"># Trigger download</div>
-            <div>curl -X POST http://localhost:4966/embedding/download</div>
+            <div>curl -X POST http://localhost:8400/embedding/download</div>
+          </div>
+
+          <h3 className="mt-6 text-lg font-medium">Via CLI</h3>
+          <p className="mt-2 text-sm text-text-muted">
+            You can also use the CLI to download the model without starting the daemon:
+          </p>
+          <div className="mt-2 rounded-lg bg-surface border border-border p-4 font-mono text-sm overflow-x-auto">
+            <div>codrag models</div>
+          </div>
+          <div className="my-6 p-8 border-2 border-dashed border-border rounded-lg bg-surface-raised flex flex-col items-center justify-center text-text-muted gap-2">
+            <div className="w-12 h-12 rounded-full bg-surface border border-border flex items-center justify-center">
+              <ImageIcon className="w-6 h-6" />
+            </div>
+            <p className="font-medium">Screenshot: CLI Model Download</p>
+            <p className="text-sm text-center">Show the terminal output of &apos;codrag models&apos; downloading the ONNX artifacts.</p>
           </div>
 
           <h3 className="mt-6 text-lg font-medium">Via Dashboard</h3>
@@ -63,6 +80,13 @@ export default function Page() {
             Go to <strong>Settings → AI Models → Embedding</strong>. If the model is not yet
             downloaded, click the download button. The progress bar shows download status.
           </p>
+          <div className="my-6 p-8 border-2 border-dashed border-border rounded-lg bg-surface-raised flex flex-col items-center justify-center text-text-muted gap-2">
+            <div className="w-12 h-12 rounded-full bg-surface border border-border flex items-center justify-center">
+              <ImageIcon className="w-6 h-6" />
+            </div>
+            <p className="font-medium">Screenshot: Embedding Settings</p>
+            <p className="text-sm text-center">Show the dashboard settings panel for Embeddings with the &#39;Native ONNX&#39; option selected and status &#39;Ready&#39;.</p>
+          </div>
         </section>
 
         {/* Switching to Ollama */}

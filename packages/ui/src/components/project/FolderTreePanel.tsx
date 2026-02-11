@@ -27,7 +27,7 @@ export function FolderTreePanel({
   onNodeClick,
   pathWeights,
   onWeightChange,
-  title = 'Index Scope',
+  title = 'Knowledge Scope',
   className,
   bare = false,
 }: FolderTreePanelProps) {
@@ -35,7 +35,7 @@ export function FolderTreePanel({
   const includedCount = includedPaths?.size ?? 0;
 
   return (
-    <Container className={cn(!bare && 'border border-border bg-surface shadow-sm', 'flex flex-col', className)}>
+    <Container className={cn(!bare && 'border border-border bg-surface shadow-sm', 'h-full min-h-0 flex flex-col', className)}>
       {!bare && (
         <Flex justifyContent="between" alignItems="center" className="mb-4 gap-2">
           <Title className="text-text">{title}</Title>

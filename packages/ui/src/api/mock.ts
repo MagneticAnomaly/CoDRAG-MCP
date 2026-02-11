@@ -1,110 +1,252 @@
 import type { ApiClient } from './client';
 
+const MOCK_PROJECT = {
+  id: 'proj_mock_001',
+  name: 'Demo Project',
+  path: '/mock/demo-project',
+  mode: 'standalone' as const,
+  created_at: '2026-01-15T10:00:00Z',
+  updated_at: '2026-02-10T14:30:00Z',
+};
+
+const MOCK_STATUS = {
+  building: false,
+  stale: false,
+  index: {
+    exists: true,
+    total_chunks: 1234,
+    embedding_dim: 768,
+    embedding_model: 'nomic-embed-text',
+    last_build_at: '2026-02-10T12:00:00Z',
+    last_error: null,
+  },
+  trace: {
+    enabled: true,
+    exists: true,
+    building: false,
+    node_count: 456,
+    edge_count: 789,
+    last_build_at: '2026-02-10T12:05:00Z',
+    last_error: null,
+  },
+  watch: {
+    enabled: false,
+    state: 'disabled',
+  },
+};
+
 export class MockApiClient implements ApiClient {
   public readonly baseUrl = 'mock://local';
 
   async getHealth(): Promise<{ status: string; version: string }> {
-    throw new Error(`MockApiClient: method 'getHealth' is not implemented`);
+    return { status: 'ok', version: '0.1.0-mock' };
   }
 
   async listProjects(): Promise<any> {
-    throw new Error(`MockApiClient: method 'listProjects' is not implemented`);
+    return { projects: [MOCK_PROJECT], total: 1 };
   }
 
   async createProject(): Promise<any> {
-    throw new Error(`MockApiClient: method 'createProject' is not implemented`);
+    return { project: { ...MOCK_PROJECT, id: `proj_mock_${Date.now()}` } };
   }
 
   async getProject(): Promise<any> {
-    throw new Error(`MockApiClient: method 'getProject' is not implemented`);
+    return { project: MOCK_PROJECT };
   }
 
   async updateProject(): Promise<any> {
-    throw new Error(`MockApiClient: method 'updateProject' is not implemented`);
+    return { project: MOCK_PROJECT };
   }
 
   async deleteProject(): Promise<any> {
-    throw new Error(`MockApiClient: method 'deleteProject' is not implemented`);
+    return { removed: true, purged: false };
   }
 
   async getProjectStatus(): Promise<any> {
-    throw new Error(`MockApiClient: method 'getProjectStatus' is not implemented`);
+    return MOCK_STATUS;
   }
 
   async buildProject(): Promise<any> {
-    throw new Error(`MockApiClient: method 'buildProject' is not implemented`);
+    return { started: true, building: true, build_id: 'build_mock_001' };
   }
 
   async search(): Promise<any> {
-    throw new Error(`MockApiClient: method 'search' is not implemented`);
+    return {
+      results: [
+        {
+          chunk_id: 'chunk_mock_001',
+          source_path: 'src/main.py',
+          span: { start_line: 10, end_line: 25 },
+          preview: 'def main():\n    """Main entry point for the application."""\n    ...',
+          score: 0.92,
+        },
+        {
+          chunk_id: 'chunk_mock_002',
+          source_path: 'src/utils.py',
+          span: { start_line: 45, end_line: 60 },
+          preview: 'def process_data(input):\n    """Process input data and return results."""\n    ...',
+          score: 0.85,
+        },
+      ],
+    };
   }
 
   async assembleContext(): Promise<any> {
-    throw new Error(`MockApiClient: method 'assembleContext' is not implemented`);
+    return {
+      context: '# Context for your query\n\n## src/main.py:10-25\n```python\ndef main():\n    """Main entry point."""\n    app = create_app()\n    app.run()\n```\n\n## src/utils.py:45-60\n```python\ndef process_data(input):\n    return transform(input)\n```',
+      chunks: [],
+      total_chars: 256,
+      estimated_tokens: 64,
+    };
   }
 
   async getTraceStatus(): Promise<any> {
-    throw new Error(`MockApiClient: method 'getTraceStatus' is not implemented`);
+    return MOCK_STATUS.trace;
   }
 
   async getProjectRoots(): Promise<any> {
-    throw new Error(`MockApiClient: method 'getProjectRoots' is not implemented`);
+    return { roots: ['/mock/demo-project'] };
   }
 
-  async getProjectFileContent(): Promise<any> {
-    throw new Error(`MockApiClient: method 'getProjectFileContent' is not implemented`);
+  async getProjectFileContent(_projectId: string, path: string): Promise<{ content: string; path: string; size: number }> {
+    return { content: '// Mock content', path, size: 100 };
+  }
+
+  async detectStack(_projectId: string): Promise<{ recommended_globs: string[]; detected_presets: string[]; all_presets: Record<string, string[]> }> {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    return {
+      recommended_globs: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.json'],
+      detected_presets: ['Web (JS/TS)'],
+      all_presets: {
+        "Web (JS/TS)": ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx", "**/*.html", "**/*.css", "**/*.json"],
+        "Python": ["**/*.py", "**/*.ipynb"],
+      }
+    };
   }
 
   async startWatch(): Promise<any> {
-    throw new Error(`MockApiClient: method 'startWatch' is not implemented`);
+    return { enabled: true, status: { enabled: true, state: 'idle', debounce_ms: 5000 } };
   }
 
   async stopWatch(): Promise<any> {
-    throw new Error(`MockApiClient: method 'stopWatch' is not implemented`);
+    return { enabled: false };
   }
 
   async getWatchStatus(): Promise<any> {
-    throw new Error(`MockApiClient: method 'getWatchStatus' is not implemented`);
+    return { enabled: false, state: 'disabled', debounce_ms: 5000, stale: false, pending: false };
   }
 
   async getLLMStatus(): Promise<any> {
-    throw new Error(`MockApiClient: method 'getLLMStatus' is not implemented`);
+    return {
+      ollama: { url: 'http://localhost:11434', connected: true, models: ['nomic-embed-text'] },
+      clara: { url: 'http://localhost:8765', enabled: false, connected: false },
+    };
+  }
+
+  async testLLMConnectivity(): Promise<{ ollama: { connected: boolean }; clara: { connected: boolean } }> {
+    return { ollama: { connected: true }, clara: { connected: false } };
   }
 
   async getProjectFiles(): Promise<any> {
-    throw new Error(`MockApiClient: method 'getProjectFiles' is not implemented`);
+    return {
+      path: '/mock/demo-project',
+      tree: [
+        { name: 'src', type: 'folder', children: [{ name: 'main.py', type: 'file' }] },
+        { name: 'README.md', type: 'file' },
+      ],
+    };
   }
 
   async getPathWeights(): Promise<any> {
-    throw new Error(`MockApiClient: method 'getPathWeights' is not implemented`);
+    return { path_weights: { 'src/': 1.5, 'docs/': 0.5 } };
   }
 
   async updatePathWeights(): Promise<any> {
-    throw new Error(`MockApiClient: method 'updatePathWeights' is not implemented`);
+    return { path_weights: {} };
   }
 
   async searchTrace(): Promise<any> {
-    throw new Error(`MockApiClient: method 'searchTrace' is not implemented`);
+    return { nodes: [] };
   }
 
   async getTraceNode(): Promise<any> {
-    throw new Error(`MockApiClient: method 'getTraceNode' is not implemented`);
+    return { node: { id: 'node_mock', kind: 'symbol', name: 'main' }, in_degree: 0, out_degree: 2 };
   }
 
   async getTraceNeighbors(): Promise<any> {
-    throw new Error(`MockApiClient: method 'getTraceNeighbors' is not implemented`);
+    return { nodes: [], edges: [] };
   }
 
   async buildTrace(): Promise<any> {
-    throw new Error(`MockApiClient: method 'buildTrace' is not implemented`);
+    return { started: true, building: true };
   }
 
   async getTraceCoverage(): Promise<any> {
-    throw new Error(`MockApiClient: method 'getTraceCoverage' is not implemented`);
+    return {
+      summary: { total_files: 10, traced_files: 8, untraced_files: 2, stale_files: 0, coverage_pct: 80 },
+      untraced: [],
+      stale: [],
+      ignored: [],
+    };
   }
 
   async updateTraceIgnore(): Promise<any> {
-    throw new Error(`MockApiClient: method 'updateTraceIgnore' is not implemented`);
+    return { success: true };
+  }
+
+  async getLicense(): Promise<any> {
+    return {
+      license: { tier: 'free', valid: true, email: null, expires_at: null, seats: 1, features: [] },
+      features: { auto_rebuild: false, trace_index: true, mcp_tools: true },
+    };
+  }
+
+  async getGlobalConfig(): Promise<any> {
+    return { llm_config: { embedding: { source: 'huggingface' } } };
+  }
+
+  async updateGlobalConfig(): Promise<any> {
+    return { success: true };
+  }
+
+  async getEmbeddingStatus(): Promise<any> {
+    return { available: true, model: 'nomic-embed-text-v1.5', dim: 768, downloaded: true };
+  }
+
+  async downloadEmbedding(): Promise<any> {
+    return { success: true };
+  }
+
+  async getClaraStatus(): Promise<any> {
+    return { available: false, enabled: false };
+  }
+
+  async getClaraHealth(): Promise<any> {
+    return { healthy: false, error: 'Not configured' };
+  }
+
+  async getProjectActivity(): Promise<any> {
+    return { activity: [] };
+  }
+
+  async getProjectCoverage(): Promise<any> {
+    return { summary: { total_files: 10, indexed_files: 8, coverage_pct: 80 }, tree: [] };
+  }
+
+  async testLLMEndpoint(): Promise<any> {
+    return { success: true, message: 'Connection successful' };
+  }
+
+  async fetchLLMModels(): Promise<any> {
+    return { models: ['nomic-embed-text', 'llama3.2:3b', 'mistral:7b'] };
+  }
+
+  async testLLMModel(): Promise<any> {
+    return { success: true, message: 'Model ready', model_status: 'ready' };
+  }
+
+  async getModelStatus(): Promise<any> {
+    return { status: 'ready', loaded: true };
   }
 }
 

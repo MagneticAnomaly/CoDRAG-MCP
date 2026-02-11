@@ -92,15 +92,20 @@ User Query
 **API Contract:**
 ```typescript
 interface EmbeddingConfig {
-  source: 'ollama' | 'huggingface';
-  // Ollama mode
-  ollama_endpoint?: string;
-  ollama_model?: string;
+  source: 'endpoint' | 'huggingface';
+  // Endpoint mode
+  endpoint_id?: string;   // Reference to a SavedEndpoint
+  model?: string;         // e.g. 'nomic-embed-text'
   // HuggingFace mode
   hf_repo_id?: string;
-  hf_model_path?: string;  // Local cache path
+  hf_downloaded?: boolean;
+  hf_download_progress?: number;
 }
 ```
+
+**Backend Wiring:**
+The dashboard's embedding config drives the backend's `_create_embedder()` function.
+Changing source/endpoint/model invalidates cached indexes so the next build uses the new embedder.
 
 ---
 
@@ -113,9 +118,9 @@ interface EmbeddingConfig {
 - Model selector (populated from endpoint)
 
 **Recommended Models:**
-- `qwen3:4b-instruct` (Ollama)
-- `phi-3-mini` (Ollama)
-- `gpt-4o-mini` (OpenAI)
+- [`ministral-3:3b`](https://ollama.com/library/ministral-3) (Ollama) - **Preferred** for edge devices
+- [`qwen2.5:3b`](https://ollama.com/library/qwen2.5) (Ollama)
+- [`phi3:mini`](https://ollama.com/library/phi3) (Ollama)
 
 **UI Pattern:**
 ```
@@ -129,6 +134,7 @@ interface EmbeddingConfig {
 │ Status: ○ Not configured                                        │
 │                                                                 │
 │ [Test Connection]                                               │
+│ └─ Recommended: ministral-3:3b for best CLaRa compatibility     │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -143,11 +149,16 @@ interface EmbeddingConfig {
 - Model selector (populated from endpoint)
 
 **Recommended Models:**
-- `mistral` / `mistral-nemo` (Ollama)
-- `qwen3:30b-instruct` (Ollama)
+- `ministral-3:8b` (Ollama) - **Preferred**
+- `mistral-nemo` (Ollama)
+- `qwen2.5:14b` (Ollama)
 - `deepseek-coder-v2` (Ollama)
-- `gpt-4o` (OpenAI)
-- `claude-3-5-sonnet` (Anthropic)
+
+**Rationale for Mistral/Ministral:**
+We recommend the **Ministral 3** family (3B, 8B) for CoDRAG's local pipeline.
+1. **Edge Optimization:** Designed specifically for low-latency local inference, matching CoDRAG's local-first philosophy.
+2. **CLaRa Compatibility:** Since `apple/CLaRa-7B-Instruct` is typically deployed alongside these, staying within the Mistral family (or compatible architectures) ensures consistent tokenization behavior if shared infrastructure is used in the future.
+3. **Performance:** Ministral 3 outperforms previous 7B models in reasoning and coding tasks while being significantly faster.
 
 **UI Pattern:** Same as Small Model, different slot.
 
@@ -238,25 +249,25 @@ Users can save multiple endpoints for reuse across model slots.
 
 ## Data Model
 
-### Config Schema
+### Config Schema (as implemented)
 
 ```typescript
 interface LLMConfig {
   // Embedding model
   embedding: {
-    source: 'ollama' | 'huggingface';
-    ollama_endpoint?: string;
-    ollama_model?: string;
-    hf_repo_id?: string;
+    source: 'endpoint' | 'huggingface';
+    endpoint_id?: string;     // Reference to SavedEndpoint.id
+    model?: string;           // e.g. 'nomic-embed-text'
+    hf_repo_id?: string;      // e.g. 'nomic-ai/nomic-embed-text-v1.5'
     hf_downloaded?: boolean;
-    hf_model_path?: string;
+    hf_download_progress?: number;
   };
   
   // Small model (fast)
   small_model: {
-    enabled: boolean;
-    endpoint_id?: string;  // Reference to saved endpoint
-    model?: string;
+    enabled: boolean;         // Auto-set true when user selects endpoint+model
+    endpoint_id?: string;
+    model?: string;           // Empty until user selects
   };
   
   // Large model (powerful)
@@ -269,61 +280,77 @@ interface LLMConfig {
   // CLaRa compression
   clara: {
     enabled: boolean;
-    source: 'huggingface' | 'remote';
-    hf_downloaded?: boolean;
-    hf_model_path?: string;
+    source: 'huggingface' | 'endpoint';
+    endpoint_id?: string;
     remote_url?: string;
+    hf_repo_id?: string;
+    hf_downloaded?: boolean;
+    hf_download_progress?: number;
   };
   
   // Saved endpoints
   saved_endpoints: Array<{
     id: string;
     name: string;
-    provider: 'ollama' | 'openai' | 'openai-compatible' | 'anthropic';
+    provider: 'ollama' | 'clara';
     url: string;
-    api_key?: string;  // Encrypted at rest
   }>;
 }
 ```
 
+**Notes:**
+- Small/Large model slots start empty — no default models are pre-filled.
+- `enabled` is automatically set to `true` when the user selects an endpoint or model.
+- Badge status is derived from endpoint+model presence and test results, not the `enabled` flag.
+
 ### Storage Location
 
 ```
-~/.local/share/codrag/
-├── config.yaml           # Global config including LLM settings
-├── models/               # Downloaded HF models
-│   ├── nomic-embed-text/
-│   └── clara-7b/
+<index_dir>/                      # Default: ./codrag_data/
+├── ui_config.json                # Global config including llm_config
+└── ...                           # Index data, manifests, etc.
+
+~/.cache/huggingface/hub/         # HuggingFace model cache (managed by hf_hub)
+├── models--nomic-ai--nomic-embed-text-v1.5/
 └── ...
 ```
+
+The `llm_config` is persisted inside `ui_config.json` and loaded via the
+`GET /api/code-index/config` endpoint. The dashboard auto-saves changes
+via `PUT /api/code-index/config` with a 500ms debounce.
 
 ---
 
 ## Backend API
 
-### Endpoints
+### Endpoints (as implemented)
 
 ```
-GET  /llm/config                    Get current LLM configuration
-POST /llm/config                    Update LLM configuration
+GET  /api/code-index/config         Get global config (includes llm_config)
+PUT  /api/code-index/config         Update global config (deep merge)
+                                    ↳ Invalidates cached indexes if embedding changes
 
-GET  /llm/endpoints                 List saved endpoints
-POST /llm/endpoints                 Add new endpoint
-PUT  /llm/endpoints/{id}            Update endpoint
-DELETE /llm/endpoints/{id}          Delete endpoint
+POST /api/llm/proxy/models          Fetch available models from an endpoint
+POST /api/llm/proxy/test            Test endpoint connectivity
+POST /api/llm/proxy/test-model      Test a specific model (readiness-aware)
+                                    ↳ Embedding models use /api/embeddings
+                                    ↳ Other models use /api/generate with preload
+POST /api/llm/model-status          Check model readiness without test request
 
-POST /llm/endpoints/{id}/test       Test endpoint connection
-GET  /llm/endpoints/{id}/models     List available models at endpoint
+GET  /embedding/status              Native embedding model availability
+POST /embedding/download            Download native ONNX embedding model
 
-POST /llm/embedding/test            Test embedding model
-POST /llm/small/test                Test small model
-POST /llm/large/test                Test large model
-POST /llm/clara/test                Test CLaRa connection
+GET  /clara/status                  CLaRa sidecar status
+GET  /clara/health                  CLaRa health check
 
-POST /llm/hf/download               Start HuggingFace model download
-GET  /llm/hf/download/status        Get download progress
-POST /llm/hf/delete                 Delete downloaded model
+GET  /api/llm/status                Legacy: Ollama + CLaRa connectivity check
+POST /api/llm/test                  Legacy: Force connectivity check
 ```
+
+**Note:** Endpoint and model configuration is managed entirely through the
+`llm_config` object within the global config. There are no separate CRUD
+endpoints for saved endpoints — they are stored in `llm_config.saved_endpoints`
+and persisted via the config update endpoint.
 
 ### HuggingFace Download Flow
 
@@ -427,23 +454,26 @@ interface ModelCardProps {
 
 ## Open Questions
 
-1. **API Key Storage:** Encrypt at rest? Use system keychain?
-2. **Model Download Location:** Global or per-project?
-3. **Ollama Auto-Detect:** Should we auto-discover Ollama at localhost:11434?
-4. **Default Models:** Should onboarding pre-select recommended models?
+1. **API Key Storage:** Encrypt at rest? Use system keychain? *(Deferred — no API key providers implemented yet)*
+2. ~~**Model Download Location:** Global or per-project?~~ → **Resolved:** Global via HuggingFace cache.
+3. ~~**Ollama Auto-Detect:** Should we auto-discover Ollama at localhost:11434?~~ → **Resolved:** A "Default Ollama" endpoint is pre-configured.
+4. ~~**Default Models:** Should onboarding pre-select recommended models?~~ → **Resolved:** No. Model selectors start empty; user must explicitly choose. Embedding auto-suggests `nomic-embed-text` when its endpoint is selected.
 
 ---
 
-## Implementation Priority
+## Implementation Status
 
-| Priority | Task |
-|----------|------|
-| P0 | Embedding model config (required for core function) |
-| P1 | Endpoint management UI |
-| P1 | Small/Large model config |
-| P2 | HuggingFace download for embeddings |
-| P2 | CLaRa integration |
-| P3 | Claude/OpenAI BYOK support |
+| Priority | Task | Status |
+|----------|------|--------|
+| P0 | Embedding model config (drives backend embedder) | ✅ Done |
+| P1 | Endpoint management UI (add/edit/delete/test) | ✅ Done |
+| P1 | Small/Large model config + test connection | ✅ Done |
+| P1 | Settings persistence across sessions | ✅ Done |
+| P1 | Badge status reflects test results | ✅ Done |
+| P2 | HuggingFace download for embeddings | ✅ Done (NativeEmbedder) |
+| P2 | CLaRa integration (endpoint mode) | ✅ Done |
+| P2 | CLaRa HuggingFace download | 🔲 Planned |
+| P3 | Claude/OpenAI BYOK support | 🔲 Planned |
 
 ---
 

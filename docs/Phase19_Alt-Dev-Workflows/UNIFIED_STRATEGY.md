@@ -32,6 +32,7 @@ These are tools we actively test, document, and promote on the verified integrat
     *   Local-first alignment.
 *   **Current Targets**:
     *   **Claude Desktop** (Reference implementation)
+    *   **CoDRAG VS Code Extension** (First-party IDE integration)
     *   **Gemini CLI Desktop** (The "Open Source Claude Desktop")
     *   **Qwen Code** (The "Terminal Agent" - via Qwen-Agent MCP support)
 

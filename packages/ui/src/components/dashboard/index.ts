@@ -9,3 +9,6 @@ export type { IndexStatsProps, StatItem } from './IndexStats';
 
 export { LLMStatusWidget } from './LLMStatusWidget';
 export type { LLMStatusWidgetProps, LLMServiceStatus } from './LLMStatusWidget';
+
+export { UsageGuidePanel } from './UsageGuidePanel';
+export type { UsageGuidePanelProps } from './UsageGuidePanel';

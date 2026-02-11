@@ -1,6 +1,23 @@
-import { Folder, Database, Activity, AlertCircle } from 'lucide-react';
+import { Folder, Database, Activity, AlertCircle, FileText, Code2, AlignLeft } from 'lucide-react';
 import { Card, Flex, Badge, Title, Text, Divider } from '@tremor/react';
 import { cn } from '../../lib/utils';
+import { ProgressIndicator } from '../status/ProgressIndicator';
+import type { TaskProgress } from '../../types';
+
+export interface IndexBuildStats {
+  mode: string;
+  files_total: number;
+  files_reused: number;
+  files_embedded: number;
+  files_deleted: number;
+  chunks_total: number;
+  lines_scanned?: number;
+  lines_indexed?: number;
+  files_docs?: number;
+  files_code?: number;
+  lines_docs?: number;
+  lines_code?: number;
+}
 
 export interface IndexStats {
   loaded: boolean;
@@ -9,67 +26,155 @@ export interface IndexStats {
   built_at?: string;
   total_documents?: number;
   embedding_dim?: number;
+  build?: IndexBuildStats;
 }
 
 export interface IndexStatusCardProps {
   stats: IndexStats;
   building?: boolean;
+  progress?: TaskProgress;
   lastError?: string | null;
   className?: string;
   bare?: boolean;
 }
 
+function formatNumber(num: number): string {
+  if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+  if (num >= 1000) return (num / 1000).toFixed(1) + 'k';
+  return num.toString();
+}
+
 /**
  * IndexStatusCard - Shows the current state of the code index.
- * 
- * Displays:
- * - Project Name (placeholder or from props if available)
- * - Loaded status
- * - Stats
  */
 export function IndexStatusCard({
   stats,
   building = false,
+  progress,
   lastError,
   className,
   bare = false,
 }: IndexStatusCardProps) {
   const Container = bare ? 'div' : Card;
   
+  // Calculate stats
+  const totalFiles = (stats.build?.files_code || 0) + (stats.build?.files_docs || 0);
+  
+  const linesIndexed = stats.build?.lines_indexed || 0;
+  const linesTotal = stats.build?.lines_scanned || 0;
+  const coveragePercent = linesTotal > 0 ? Math.round((linesIndexed / linesTotal) * 100) : 0;
+
+  // Line-level type breakdown (fall back to file counts if line data absent)
+  const hasLineBreakdown = (stats.build?.lines_docs ?? 0) + (stats.build?.lines_code ?? 0) > 0;
+  const breakdownTotal = hasLineBreakdown
+    ? (stats.build!.lines_docs! + stats.build!.lines_code!)
+    : totalFiles;
+  const codeValue = hasLineBreakdown ? (stats.build!.lines_code ?? 0) : (stats.build?.files_code || 0);
+  const docsValue = hasLineBreakdown ? (stats.build!.lines_docs ?? 0) : (stats.build?.files_docs || 0);
+  const codePercent = breakdownTotal > 0 ? (codeValue / breakdownTotal) * 100 : 0;
+  const docsPercent = breakdownTotal > 0 ? (docsValue / breakdownTotal) * 100 : 0;
+  const breakdownUnit = hasLineBreakdown ? 'lines' : 'files';
+
+  // Construct effective progress for display
+  // If building but no progress object yet, show indeterminate
+  const effectiveProgress = progress || (building ? {
+    task_id: 'pending',
+    message: 'Starting build...',
+    current: 0,
+    total: 100,
+    percent: 0,
+    status: 'running'
+  } as TaskProgress : undefined);
+
   return (
     <Container className={cn(!bare && 'border border-border bg-surface shadow-sm', className)}>
-      <Flex justifyContent="between" alignItems="start">
-        <div>
-          <Flex className="gap-3" alignItems="center">
-            {!bare && <Folder className="w-8 h-8 text-primary" />}
-            <div>
-              {!bare && <Title className="text-text">Current Project</Title>}
-              <Text className={cn("font-mono text-sm text-text-subtle", bare && "text-xs")}>{stats.index_dir || 'No project loaded'}</Text>
-            </div>
-          </Flex>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3 min-w-0 flex-1">
+          {!bare && <Folder className="w-8 h-8 text-primary shrink-0 mt-0.5" />}
+          <div className="min-w-0 flex-1">
+            {!bare && <Title className="text-text">Knowledge Base</Title>}
+            <Text 
+              className={cn("font-mono text-sm text-text-subtle break-words", bare && "text-xs")}
+              title={stats.index_dir}
+            >
+              {stats.index_dir || 'No project loaded'}
+            </Text>
+          </div>
         </div>
-        <Flex className="gap-2">
+        <div className="flex items-center gap-2 shrink-0 mt-1">
           {stats.loaded ? (
             <Badge color="green">Fresh</Badge>
           ) : (
              <Badge color="yellow">Stale</Badge>
           )}
           {building && <Badge color="blue">Building</Badge>}
-        </Flex>
-      </Flex>
-      <Divider className="my-4" />
-      <Flex className="gap-3">
-        <div className="flex items-center gap-4 text-sm text-text-muted">
-          <span className="flex items-center gap-2">
-            <Database className="w-4 h-4" />
-            {stats.total_documents ?? 0} docs
-          </span>
-          <span className="flex items-center gap-2">
-            <Activity className="w-4 h-4" />
-            {stats.model ?? 'No model'}
-          </span>
         </div>
-      </Flex>
+      </div>
+      
+      {effectiveProgress && (
+        <div className="mt-4">
+          <ProgressIndicator progress={effectiveProgress} />
+        </div>
+      )}
+      
+      <Divider className="my-4" />
+      
+      <div className="space-y-4">
+        {/* Primary Stats Row */}
+        <Flex className="gap-6 flex-wrap">
+          <div className="flex items-center gap-2 text-sm text-text-muted" title="Total chunks indexed">
+            <Database className="w-4 h-4 text-primary" />
+            <span className="font-medium text-text">{formatNumber(stats.total_documents ?? 0)}</span> chunks
+          </div>
+          
+          {(stats.build?.lines_indexed !== undefined) && (
+            <div className="flex items-center gap-2 text-sm text-text-muted" title={`Indexed ${formatNumber(linesIndexed)} of ${formatNumber(linesTotal)} indexable lines (${coveragePercent}% coverage)`}>
+              <AlignLeft className="w-4 h-4 text-primary" />
+              <span className="font-medium text-text">{formatNumber(linesIndexed)}</span>
+              <span className="text-text-subtle">/</span>
+              <span>{formatNumber(linesTotal)}</span> lines
+              <span className="text-xs text-text-subtle">({coveragePercent}%)</span>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 text-sm text-text-muted" title={`Embedding Model: ${stats.model}`}>
+            <Activity className="w-4 h-4 text-primary" />
+            <span className="truncate max-w-[150px]">{stats.model ?? 'No model'}</span>
+          </div>
+        </Flex>
+
+        {/* Code vs Docs Distribution */}
+        {breakdownTotal > 0 && (
+          <div className="space-y-1.5">
+            <div className="flex justify-between text-xs text-text-subtle">
+              <span className="flex items-center gap-1.5">
+                <Code2 className="w-3 h-3" />
+                Code {Math.round(codePercent)}%
+                {hasLineBreakdown && <span className="opacity-60">({formatNumber(codeValue)} lines)</span>}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <FileText className="w-3 h-3" />
+                Docs {Math.round(docsPercent)}%
+                {hasLineBreakdown && <span className="opacity-60">({formatNumber(docsValue)} lines)</span>}
+              </span>
+            </div>
+            <div className="h-1.5 w-full bg-surface-raised rounded-full overflow-hidden flex">
+              <div 
+                className="h-full bg-blue-500/70" 
+                style={{ width: `${codePercent}%` }} 
+              />
+              <div 
+                className="h-full bg-emerald-500/70" 
+                style={{ width: `${docsPercent}%` }} 
+              />
+            </div>
+            {!hasLineBreakdown && totalFiles > 0 && (
+              <div className="text-[10px] text-text-subtle/60 italic">by {breakdownUnit}</div>
+            )}
+          </div>
+        )}
+      </div>
+
       {lastError && (
         <div className="mt-4 flex gap-2 p-3 rounded-md bg-error-muted/10 border border-error-muted/20 text-error">
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />

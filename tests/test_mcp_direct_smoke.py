@@ -173,7 +173,7 @@ async def test_mcp_direct_protocol_tools_list(mini_repo: Path, fake_embedder: Fa
     assert "codrag_status" in tool_names
     assert "codrag_build" in tool_names
     assert "codrag_search" in tool_names
-    assert "codrag_context" in tool_names
+    assert "codrag" in tool_names
 
 
 @pytest.mark.asyncio

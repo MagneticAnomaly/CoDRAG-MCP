@@ -41,7 +41,7 @@ export function ContextOutput({
         <Flex justifyContent="between" alignItems="center" className="mb-4">
           <Flex justifyContent="start" alignItems="center" className="gap-2">
             <FileText className="w-5 h-5 text-primary" />
-            <Title className="text-text">Assembled Context</Title>
+            <Title className="text-text">Prompt Buffer</Title>
           </Flex>
           {meta && (
             <Flex justifyContent="end" className="gap-2">

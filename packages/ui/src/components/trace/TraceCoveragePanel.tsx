@@ -15,7 +15,8 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Button } from '../primitives/Button';
-import type { TraceCoverageFile, TraceCoverageSummary } from '../../types';
+import { ProgressIndicator } from '../status/ProgressIndicator';
+import type { TraceCoverageFile, TraceCoverageSummary, TaskProgress } from '../../types';
 
 export interface TraceCoveragePanelProps {
   /** Coverage summary stats */
@@ -28,6 +29,8 @@ export interface TraceCoveragePanelProps {
   ignoredFiles: TraceCoverageFile[];
   /** Whether trace is currently building */
   building: boolean;
+  /** Progress of current build */
+  progress?: TaskProgress;
   /** Whether coverage data is loading */
   loading: boolean;
   /** Trigger trace build for all untraced/stale files */
@@ -51,6 +54,9 @@ const LANG_LABELS: Record<string, string> = {
   javascript: 'JavaScript',
   go: 'Go',
   rust: 'Rust',
+  java: 'Java',
+  c: 'C',
+  cpp: 'C++',
 };
 
 function formatTimeAgo(isoDate: string): string {
@@ -216,6 +222,7 @@ export function TraceCoveragePanel({
   staleFiles,
   ignoredFiles,
   building,
+  progress,
   loading,
   onTraceAll,
   onRetraceStale,
@@ -268,7 +275,7 @@ export function TraceCoveragePanel({
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-text flex items-center gap-2">
               <FileCode className="w-4 h-4" />
-              Trace Coverage
+              Cross-Reference Status
             </h3>
             <Button
               variant="ghost"
@@ -296,9 +303,15 @@ export function TraceCoveragePanel({
         ) : null}
 
         {building && (
-          <div className="flex items-center gap-2 text-xs text-primary bg-primary/5 px-3 py-1.5 rounded-md">
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            Trace build in progress...
+          <div className="bg-primary/5 px-3 py-2 rounded-md">
+            {progress ? (
+              <ProgressIndicator progress={progress} />
+            ) : (
+              <div className="flex items-center gap-2 text-xs text-primary">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Mapping full codebase...
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -375,7 +388,7 @@ export function TraceCoveragePanel({
                         }}
                       >
                         <Play className="w-3 h-3 mr-1" />
-                        Trace All
+                        Map All
                       </Button>
                     ) : undefined
                   }
@@ -403,7 +416,7 @@ export function TraceCoveragePanel({
                         }}
                       >
                         <RefreshCw className="w-3 h-3 mr-1" />
-                        Re-trace
+                        Update Map
                       </Button>
                     ) : undefined
                   }
@@ -456,7 +469,7 @@ export function TraceCoveragePanel({
               <div className="flex flex-col items-center justify-center py-8 text-text-muted">
                 <EyeOff className="w-8 h-8 mb-2 opacity-30" />
                 <p className="text-xs font-medium">No ignored files</p>
-                <p className="text-[10px] mt-1">Add patterns above to exclude files from trace</p>
+                <p className="text-[10px] mt-1">Add patterns above to exclude files from map</p>
               </div>
             ) : (
               <div>
@@ -479,7 +492,7 @@ export function TraceCoveragePanel({
       {/* Footer with last build time */}
       {summary?.last_build_at && (
         <div className="px-4 py-2 border-t border-border text-[10px] text-text-muted">
-          Last traced: {formatTimeAgo(summary.last_build_at)}
+          Last updated: {formatTimeAgo(summary.last_build_at)}
         </div>
       )}
     </div>

@@ -112,7 +112,6 @@ Decisions needed before the marketing site can ship. Each section includes conte
 |---|---|---|
 | `codrag.io` | Marketing site | ? |
 | `docs.codrag.io` | Documentation | ? |
-| `support.codrag.io` | Help center / support portal | ? |
 | `payments.codrag.io` | Payment / licensing portal | ? |
 | `api.codrag.io` | License activation API | ? |
 | `blog.codrag.io` | Blog (only if not using /blog path) | Not needed if MDX |

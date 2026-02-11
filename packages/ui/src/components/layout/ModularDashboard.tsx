@@ -216,26 +216,28 @@ export function ModularDashboard({
 
   return (
     <div className={cn('codrag-modular-dashboard', className)}>
-      {/* Header with Panel Picker */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex-1">
-          {headerLeft}
+      {/* Header with Panel Picker — only rendered when there's content */}
+      {(headerLeft || headerRight || !hidePanelPicker) && (
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex-1">
+            {headerLeft}
+          </div>
+          <div className="flex items-center gap-4">
+            {headerRight}
+            {!hidePanelPicker && (
+              <PanelPicker
+                layout={layout}
+                panelDefinitions={panelDefinitions}
+                onTogglePanel={togglePanelVisibility}
+                onResetLayout={handleResetLayout}
+                onRefitLayout={reflowLayout}
+                onCopyLayout={handleCopyLayout}
+                onPasteLayout={handlePasteLayout}
+              />
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-4">
-          {headerRight}
-          {!hidePanelPicker && (
-            <PanelPicker
-              layout={layout}
-              panelDefinitions={panelDefinitions}
-              onTogglePanel={togglePanelVisibility}
-              onResetLayout={handleResetLayout}
-              onRefitLayout={reflowLayout}
-              onCopyLayout={handleCopyLayout}
-              onPasteLayout={handlePasteLayout}
-            />
-          )}
-        </div>
-      </div>
+      )}
 
       {/* Dashboard Grid */}
       <DashboardGrid
@@ -273,6 +275,8 @@ export function ModularDashboard({
           const panelNode = (
             <PanelChrome
               title={def.title}
+              description={def.description}
+              docsUrl={def.docsUrl}
               icon={def.icon}
               collapsed={collapsed}
               onCollapse={() => togglePanelCollapsed(panel.id)}

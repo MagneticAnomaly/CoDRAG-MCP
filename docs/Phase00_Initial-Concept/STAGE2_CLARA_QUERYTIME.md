@@ -1,7 +1,7 @@
-# Phase 69 — Stage 2: Query-time CLaRa Compression for `codrag_context`
+# Phase 69 — Stage 2: Query-time CLaRa Compression for `codrag`
 
 ## Goal
-Add **query-time CLaRa** as an optional post-retrieval step for `/context` (and therefore `codrag_context`) so we can:
+Add **query-time CLaRa** as an optional post-retrieval step for `/context` (and therefore `codrag`) so we can:
 
 - Reduce prompt bloat (fit more useful evidence into the same `max_chars`/token budget)
 - Keep indexing unchanged (no re-embedding / no rebuild coupling)

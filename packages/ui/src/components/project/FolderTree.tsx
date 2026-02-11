@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { ChevronRight, ChevronDown, Folder, FolderOpen, File, FileText } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Button } from '../primitives/Button';
@@ -139,6 +139,8 @@ interface TreeItemProps {
   onNodeClick?: (node: TreeNode, path: string) => void;
   pathWeights?: Record<string, number>;
   onWeightChange?: (path: string, weight: number | null) => void;
+  expandedPaths: Set<string>;
+  onToggleExpand: (path: string) => void;
 }
 
 function WeightEditor({
@@ -221,7 +223,7 @@ function WeightEditor({
           className="w-14 text-xs text-center bg-surface border border-border rounded px-1 py-0.5 font-mono
                      focus:outline-none focus:ring-1 focus:ring-primary"
         />
-        {isFolder && hasChildOverrides && (
+        {isFolder && (
           <label
             className="flex items-center gap-0.5 text-[10px] text-text-subtle whitespace-nowrap cursor-pointer"
             title="Clear individual weight overrides within this folder"
@@ -272,11 +274,11 @@ function WeightEditor({
   );
 }
 
-function TreeItem({ node, depth = 0, path = '', includedPaths, onToggleInclude, onNodeClick, pathWeights, onWeightChange }: TreeItemProps) {
-  const [expanded, setExpanded] = useState(false);
+function TreeItem({ node, depth = 0, path = '', includedPaths, onToggleInclude, onNodeClick, pathWeights, onWeightChange, expandedPaths, onToggleExpand }: TreeItemProps) {
+  const currentPath = path ? `${path}/${node.name}` : node.name;
+  const expanded = expandedPaths.has(currentPath);
   const hasChildren = node.children && node.children.length > 0;
   const isFolder = node.type === 'folder';
-  const currentPath = path ? `${path}/${node.name}` : node.name;
   const isIncluded = includedPaths?.has(currentPath) ?? node.selected;
   const isIgnored = node.status === 'ignored';
   const isSelectable = !isIgnored;
@@ -310,7 +312,7 @@ function TreeItem({ node, depth = 0, path = '', includedPaths, onToggleInclude, 
 
   const handleExpandToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setExpanded(!expanded);
+    onToggleExpand(currentPath);
   };
 
   // Determine icon based on type and inclusion state
@@ -465,6 +467,8 @@ function TreeItem({ node, depth = 0, path = '', includedPaths, onToggleInclude, 
               onNodeClick={onNodeClick}
               pathWeights={pathWeights}
               onWeightChange={onWeightChange}
+              expandedPaths={expandedPaths}
+              onToggleExpand={onToggleExpand}
             />
           ))}
         </div>
@@ -472,6 +476,8 @@ function TreeItem({ node, depth = 0, path = '', includedPaths, onToggleInclude, 
     </div>
   );
 }
+
+const EXPANDED_STORAGE_KEY = 'codrag_tree_expanded';
 
 export function FolderTree({
   data,
@@ -483,6 +489,26 @@ export function FolderTree({
   onWeightChange,
   className,
 }: FolderTreeProps) {
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set();
+    try {
+      const stored = localStorage.getItem(EXPANDED_STORAGE_KEY);
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch { return new Set(); }
+  });
+
+  const handleToggleExpand = useCallback((path: string) => {
+    setExpandedPaths((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(EXPANDED_STORAGE_KEY, JSON.stringify([...next]));
+      }
+      return next;
+    });
+  }, []);
+
   return (
     <div className={cn(compact ? 'text-sm' : '', className)}>
       {data.map((node, i) => (
@@ -494,6 +520,8 @@ export function FolderTree({
           onNodeClick={onNodeClick}
           pathWeights={pathWeights}
           onWeightChange={onWeightChange}
+          expandedPaths={expandedPaths}
+          onToggleExpand={handleToggleExpand}
         />
       ))}
     </div>

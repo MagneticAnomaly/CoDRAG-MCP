@@ -270,8 +270,11 @@ codrag mcp-config [--ide claude|cursor|windsurf|vscode|jetbrains|all] \
 # Extras
 codrag activity [--weeks 12] [--no-legend] [--no-labels] [--json] \
   [--host 127.0.0.1] [--port 8400]                                      # Activity heatmap
-codrag coverage [--host 127.0.0.1] [--port 8400]                        # Coverage visualization
+codrag coverage [--project <id>] [--host 127.0.0.1] [--port 8400]       # Coverage visualization
 codrag overview [--weeks 12] [--host 127.0.0.1] [--port 8400]            # Terminal overview dashboard
+codrag drift [--project <id>] [--host 127.0.0.1] [--port 8400]          # Index drift report
+codrag flow [--project <id>] [--host 127.0.0.1] [--port 8400]           # RAG flow visualization
+codrag config [key] [value] [--host 127.0.0.1] [--port 8400]            # View/modify config
 codrag version                                                          # Version
 ```
 
@@ -336,6 +339,23 @@ project:
     languages: [python, typescript]
     
   auto_rebuild: true
+```
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CODRAG_ENGINE` | `auto` | Selects the indexing engine: `auto` (detect best available), `rust` (faster, requires Rust build), `python` (pure Python fallback) |
+| `CODRAG_TIER` | (from license) | Override license tier for development/testing: `free`, `starter`, `pro`, `team`, `enterprise` |
+| `OLLAMA_HOST` | `http://localhost:11434` | Ollama server URL (standard Ollama env var) |
+
+**Example:**
+```bash
+# Use Python engine for debugging
+CODRAG_ENGINE=python codrag serve
+
+# Test Pro features locally
+CODRAG_TIER=pro codrag serve
 ```
 
 ---

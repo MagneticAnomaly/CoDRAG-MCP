@@ -160,14 +160,18 @@ class DirectMCPServer:
 
                 logger.info(f"Starting build (full={full})...")
                 
+                # Progress callback for build visibility
+                def on_progress(file_path: str, current: int, total: int) -> None:
+                    if current == 1 or current == total or current % 50 == 0:
+                        logger.info(f"Build progress: {current}/{total} files ({file_path})")
+                
                 # Run the blocking build in a thread
-                # TODO: Pass progress callback if we want to report it via notifications later
                 await asyncio.to_thread(
                     self._index.build,
                     repo_root=self.repo_root,
-                    # Uses defaults or policy from repo if None
-                    include_globs=None, 
+                    include_globs=None,
                     exclude_globs=None,
+                    progress_callback=on_progress,
                 )
                 
                 logger.info("Build completed")
@@ -284,7 +288,7 @@ class DirectMCPServer:
                     k=args.get("k", 8),
                     min_score=args.get("min_score", 0.15),
                 )
-            elif name == "codrag_context":
+            elif name == "codrag":
                 result = await self.tool_context(
                     query=args.get("query", ""),
                     k=args.get("k", 5),

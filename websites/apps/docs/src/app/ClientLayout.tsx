@@ -4,15 +4,21 @@ import type { ReactNode } from 'react';
 import { DocsLayout } from '@codrag/ui';
 import { docsSidebar } from '../config/docs';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
+const HOME_URL = isDev ? 'http://localhost:3000' : 'https://codrag.io';
+const DOWNLOAD_URL = isDev ? 'http://localhost:3000/download' : 'https://codrag.io/download';
+const SUPPORT_URL = isDev ? 'http://localhost:3002' : 'https://support.codrag.io';
+
 export function ClientLayout({ children }: { children: ReactNode }) {
   return (
     <DocsLayout
       headerProps={{
         productName: 'CoDRAG Docs',
         links: [
-          { label: 'Home', href: 'https://codrag.io' },
-          { label: 'Download', href: 'https://codrag.io/download' },
-          { label: 'Support', href: 'https://support.codrag.io' },
+          { label: 'Home', href: HOME_URL },
+          { label: 'Download', href: DOWNLOAD_URL },
+          { label: 'Support', href: SUPPORT_URL },
         ],
         searchPlaceholder: 'Search documentation...',
         onSearch: (query: string) => {

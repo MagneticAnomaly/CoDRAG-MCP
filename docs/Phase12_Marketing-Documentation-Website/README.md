@@ -80,8 +80,8 @@ Fallback (availability-driven):
   - optional; either canonicalize to root or to `www` (choose one)
 - `docs.codrag.io` (alias: `doc.codrag.io`)
   - documentation site (versionable)
-- `support.codrag.io`
-  - support hub (GitHub issues/discussions + email + troubleshooting links)
+- `codrag.io/contact` (formerly `support.codrag.io`)
+  - support hub (GitHub issues/discussions + email)
 - `payments.codrag.io`
   - purchase + license delivery/recovery
 - `get.codrag.io` (or `download.codrag.io`)
@@ -188,8 +188,6 @@ Implemented:
     - `codrag.io`
   - `websites/apps/docs`
     - `docs.codrag.io`
-  - `websites/apps/support`
-    - `support.codrag.io`
   - `websites/apps/payments`
     - `payments.codrag.io`
   - All apps:
@@ -203,7 +201,6 @@ Local dev (from repo root):
 - Or run individually:
   - marketing: `npm run dev -w @codrag/marketing` (port 3000)
   - docs: `npm run dev -w @codrag/docs` (port 3001)
-  - support: `npm run dev -w @codrag/support` (port 3002)
   - payments: `npm run dev -w @codrag/payments` (port 3003)
 
 ### Placeholder launch checklist

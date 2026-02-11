@@ -44,24 +44,73 @@ export default function Page() {
         {/* How It Works — Quick visual */}
         <section className="rounded-2xl border border-border bg-surface p-8 md:p-12">
           <div className="text-center mb-12">
-            <p className="text-sm font-semibold uppercase tracking-widest text-primary mb-3">Get started in 60 seconds</p>
+            <p className="text-sm font-semibold uppercase tracking-widest text-primary mb-3">Seamless Integration</p>
             <h2 className="text-3xl font-bold tracking-tight text-text sm:text-4xl">
-              Three commands. Done.
+              Works where you work.
             </h2>
+            <p className="mt-4 text-lg text-text-muted max-w-2xl mx-auto">
+              CoDRAG runs locally as an MCP server. Connect it to Cursor, Windsurf, or Claude Desktop once, and it&apos;s there forever.
+            </p>
           </div>
-          <div className="max-w-2xl mx-auto font-mono text-sm bg-background rounded-xl border border-border p-6 space-y-3">
-            <div className="flex items-center gap-2">
-              <Terminal className="w-4 h-4 text-text-subtle flex-shrink-0" />
-              <span className="text-text-muted"># Install and start the daemon</span>
+
+          <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+            {/* Step 1: Setup */}
+            <div className="rounded-xl border border-border bg-background p-6">
+              <div className="flex items-center gap-3 mb-4 border-b border-border pb-4">
+                <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold">1</div>
+                <h3 className="font-semibold text-text">Connect the Server</h3>
+              </div>
+              <div className="font-mono text-sm space-y-4">
+                <div>
+                  <div className="text-text-muted text-xs mb-1"># Start the local daemon</div>
+                  <div className="bg-surface-raised p-2 rounded border border-border-subtle text-success">
+                    $ codrag serve
+                  </div>
+                </div>
+                <div>
+                  <div className="text-text-muted text-xs mb-1"># Add to Cursor / Windsurf config</div>
+                  <div className="bg-surface-raised p-2 rounded border border-border-subtle text-text-subtle">
+                    {`"codrag": {`} <br/>
+                    &nbsp;&nbsp;{`"command": "codrag",`} <br/>
+                    &nbsp;&nbsp;{`"args": ["mcp"]`} <br/>
+                    {`}`}
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="text-success">$ codrag serve</div>
-            <div className="text-text-muted mt-2"># Point it at your project</div>
-            <div className="text-success">$ codrag add ./my-app --name &quot;MyApp&quot;</div>
-            <div className="text-text-muted mt-2"># Start using it with your AI tools</div>
-            <div className="text-success">$ codrag mcp --auto</div>
-            <div className="mt-4 pt-4 border-t border-border text-text-muted text-xs">
-              Works with Cursor, Windsurf, VS Code, Claude Desktop, and any MCP-compatible editor.
+
+            {/* Step 2: Usage */}
+            <div className="rounded-xl border border-border bg-background p-6">
+              <div className="flex items-center gap-3 mb-4 border-b border-border pb-4">
+                <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold">2</div>
+                <h3 className="font-semibold text-text">Just Ask Your Editor</h3>
+              </div>
+              <div className="space-y-4">
+                <div className="flex gap-3">
+                  <div className="mt-1 w-6 h-6 rounded bg-primary/20 flex-shrink-0" />
+                  <div className="text-sm bg-primary/5 p-3 rounded-lg text-text">
+                    <span className="font-bold block mb-1 text-primary">You</span>
+                    &quot;Trace the calls to <code className="bg-primary/10 px-1 rounded">processRefund</code> and check for missing error handlers.&quot;
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <div className="mt-1 w-6 h-6 rounded bg-info/20 flex-shrink-0" />
+                  <div className="text-sm bg-surface-raised border border-border-subtle p-3 rounded-lg text-text-muted font-mono text-xs">
+                    <div className="flex items-center gap-2 mb-2 text-info">
+                      <Terminal className="w-3 h-3" />
+                      <span>Running codrag(trace_expand=true)...</span>
+                    </div>
+                    <div>&gt; Found definition in src/payments/refunds.ts</div>
+                    <div>&gt; Traced 4 call sites in src/api/* (Rust Graph)</div>
+                    <div>&gt; Found 1 unhandled Promise rejection</div>
+                  </div>
+                </div>
+              </div>
             </div>
+          </div>
+          
+          <div className="text-center mt-8">
+             <a href="https://docs.codrag.io/mcp" className="text-sm text-primary hover:underline">View full integration guides for Cursor & Windsurf →</a>
           </div>
         </section>
 
@@ -84,7 +133,7 @@ export default function Page() {
           <div className="text-center mb-16">
             <p className="text-sm font-semibold uppercase tracking-widest text-primary mb-3">Plans</p>
             <h2 className="text-3xl font-bold tracking-tight text-text sm:text-4xl">
-              Free to start. Pro when you're ready.
+              Free to start. Pro when you&apos;re ready.
             </h2>
             <p className="mt-4 text-lg text-text-muted max-w-2xl mx-auto">
               Start with one project for free. Upgrade to Pro for unlimited projects, the structural Trace Index, and a perpetual license.

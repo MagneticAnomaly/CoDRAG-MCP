@@ -24,7 +24,7 @@
   - `codrag_status` ✅
   - `codrag_build` ✅
   - `codrag_search` ✅
-  - `codrag_context` ✅
+  - `codrag` (context) ✅
   - `codrag_trace` (when trace available) — deferred
 - [x] P05-I4 Ensure tool outputs mirror `API.md` shapes (avoid schema drift) ✅ **DONE**
 

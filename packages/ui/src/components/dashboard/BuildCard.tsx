@@ -36,14 +36,14 @@ export function BuildCard({
       {!bare && (
         <Title className="text-text mb-4 flex items-center gap-2">
           <FolderOpen className="w-5 h-5 text-primary" />
-          Build Index
+          Rebuild Knowledge Base
         </Title>
       )}
 
       <div className="space-y-6">
         <div>
           <label className="block text-sm font-medium text-text-muted mb-2">
-            Repository Root
+            Source Root
           </label>
           <TextInput
             value={repoRoot}
@@ -61,7 +61,7 @@ export function BuildCard({
           loading={building}
           icon={!building ? Play : undefined}
         >
-          {building ? 'Building...' : 'Start Build'}
+          {building ? 'Building...' : 'Start Rebuild'}
         </Button>
       </div>
     </Container>

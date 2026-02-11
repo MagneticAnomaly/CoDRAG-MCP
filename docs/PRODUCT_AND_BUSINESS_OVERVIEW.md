@@ -19,7 +19,7 @@ CoDRAG is a **local-first context engine for codebases**: it indexes your repos,
 ## The problem
 Modern AI coding workflows have a predictable failure mode:
 
-- **Model context is limited**: even large context windows are not enough for real systems.
+- **Context Assembly**: `codrag` tool automatically pulls relevant code/docs into the LLM context window.
 - **Manual context assembly does not scale**: developers paste files, guess what’s relevant, and fight hallucinations.
 - **Cloud-first code indexing is not always acceptable**:
   - security and IP constraints

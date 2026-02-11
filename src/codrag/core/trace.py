@@ -17,6 +17,8 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
+import pathspec
+
 from .ids import (
     stable_edge_id,
     stable_external_module_id,
@@ -40,8 +42,13 @@ PYTHON_EXTENSIONS = {".py"}
 TYPESCRIPT_EXTENSIONS = {".ts", ".tsx", ".js", ".jsx"}
 GO_EXTENSIONS = {".go"}
 RUST_EXTENSIONS = {".rs"}
+JAVA_EXTENSIONS = {".java"}
+CPP_EXTENSIONS = {".c", ".cpp", ".cc", ".h", ".hpp"}
 
-SUPPORTED_EXTENSIONS = PYTHON_EXTENSIONS | TYPESCRIPT_EXTENSIONS | GO_EXTENSIONS | RUST_EXTENSIONS
+SUPPORTED_EXTENSIONS = (
+    PYTHON_EXTENSIONS | TYPESCRIPT_EXTENSIONS | GO_EXTENSIONS
+    | RUST_EXTENSIONS | JAVA_EXTENSIONS | CPP_EXTENSIONS
+)
 
 
 @dataclass
@@ -100,6 +107,9 @@ class TraceBuildResult:
     file_errors: List[FileError]
 
 
+SUPPORTED_LANGUAGES = ["python", "typescript", "javascript", "go", "rust", "java", "c", "cpp"]
+
+
 def _detect_language(file_path: str) -> Optional[str]:
     ext = Path(file_path).suffix.lower()
     if ext in PYTHON_EXTENSIONS:
@@ -110,6 +120,10 @@ def _detect_language(file_path: str) -> Optional[str]:
         return "go"
     if ext in RUST_EXTENSIONS:
         return "rust"
+    if ext in JAVA_EXTENSIONS:
+        return "java"
+    if ext in CPP_EXTENSIONS:
+        return "cpp" if ext in {".cpp", ".cc", ".hpp"} else "c"
     return None
 
 
@@ -376,6 +390,8 @@ class TraceBuilder:
         include_globs: Optional[List[str]] = None,
         exclude_globs: Optional[List[str]] = None,
         max_file_bytes: int = 500_000,
+        hard_limit_bytes: int = 100_000_000,
+        use_gitignore: bool = False,
         max_files: int = 10_000,
         max_nodes: int = 100_000,
         max_edges: int = 500_000,
@@ -393,6 +409,8 @@ class TraceBuilder:
             "**/build/**",
         ]
         self.max_file_bytes = max_file_bytes
+        self.hard_limit_bytes = hard_limit_bytes
+        self.use_gitignore = use_gitignore
         self.max_files = max_files
         self.max_nodes = max_nodes
         self.max_edges = max_edges
@@ -401,6 +419,7 @@ class TraceBuilder:
         self.manifest_path = self.index_dir / "trace_manifest.json"
         self.nodes_path = self.index_dir / "trace_nodes.jsonl"
         self.edges_path = self.index_dir / "trace_edges.jsonl"
+        self.gitignore_spec = None
 
     def build(
         self,
@@ -411,6 +430,17 @@ class TraceBuilder:
 
         if _ENGINE == "rust" and _rust_engine is not None:
             return self._build_rust(progress_callback)
+
+        # Load .gitignore if requested
+        if self.use_gitignore:
+            gitignore_path = self.repo_root / ".gitignore"
+            if gitignore_path.exists():
+                try:
+                    with open(gitignore_path, "r", encoding="utf-8") as f:
+                        self.gitignore_spec = pathspec.PathSpec.from_lines("gitwildmatch", f)
+                    logger.info("Loaded .gitignore from %s", gitignore_path)
+                except Exception as e:
+                    logger.warning("Failed to parse .gitignore: %s", e)
 
         files = self._enumerate_files()
         if len(files) > self.max_files:
@@ -433,9 +463,21 @@ class TraceBuilder:
 
             # Read source and compute content hash for staleness detection
             try:
-                source = file_path.read_text(encoding="utf-8", errors="ignore")
+                # Check size for parsing decision
+                file_size = file_path.stat().st_size
+                is_large = file_size > self.max_file_bytes
+                
+                if is_large:
+                     # For large files, we skip reading full content for hash/parsing
+                     # Just hash the path + size + mtime as a proxy? 
+                     # Or read a prefix. Let's read prefix for consistency with index.py
+                    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                        source = f.read(50_000)
+                else:
+                    source = file_path.read_text(encoding="utf-8", errors="ignore")
             except Exception:
                 source = ""
+            
             file_hashes[rel_path] = stable_file_hash(source)
 
             file_node = TraceNode(
@@ -445,9 +487,13 @@ class TraceBuilder:
                 file_path=rel_path,
                 span=None,
                 language=_detect_language(rel_path),
-                metadata={},
+                metadata={"truncated": is_large, "size": file_size} if 'file_size' in locals() else {},
             )
             nodes.append(file_node)
+
+            if is_large:
+                # Skip parsing for large files
+                continue
 
             language = _detect_language(rel_path)
             if language == "python":
@@ -601,8 +647,11 @@ class TraceBuilder:
                 if not _is_relevant(rel_path, self.include_globs, self.exclude_globs):
                     continue
 
+                if self.gitignore_spec and self.gitignore_spec.match_file(rel_path):
+                    continue
+
                 try:
-                    if file_path.stat().st_size > self.max_file_bytes:
+                    if file_path.stat().st_size > self.hard_limit_bytes:
                         continue
                 except OSError:
                     continue
@@ -834,8 +883,15 @@ class TraceIndex:
         return (in_deg, out_deg)
 
     def status(self) -> Dict[str, Any]:
+        engine = _ENGINE if _ENGINE else "python"
+        base = {
+            "engine": engine,
+            "supported_languages": SUPPORTED_LANGUAGES,
+        }
+
         if not self.exists():
             return {
+                **base,
                 "enabled": True,
                 "exists": False,
                 "building": False,
@@ -848,11 +904,14 @@ class TraceIndex:
             self.load()
 
         if self._rust_handle is not None:
-            return self._rust_handle.status()
+            rust_status = self._rust_handle.status()
+            rust_status.update(base)
+            return rust_status
 
         manifest = self._manifest or {}
         counts = manifest.get("counts", {})
         return {
+            **base,
             "enabled": True,
             "exists": True,
             "building": False,
@@ -994,7 +1053,11 @@ def compute_trace_coverage(
     repo_root = Path(repo_root).resolve()
 
     if include_globs is None:
-        include_globs = ["**/*.py", "**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+        include_globs = [
+            "**/*.py", "**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx",
+            "**/*.go", "**/*.rs", "**/*.java",
+            "**/*.c", "**/*.cpp", "**/*.cc", "**/*.h", "**/*.hpp",
+        ]
     if exclude_globs is None:
         exclude_globs = [
             "**/node_modules/**",

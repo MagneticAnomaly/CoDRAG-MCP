@@ -18,7 +18,7 @@ Both expose MCP tools:
 - `codrag_status`
 - `codrag_build`
 - `codrag_search`
-- `codrag_context`
+- `codrag` (context)
 
 All tools proxy to `RAG_API_BASE` + `/{status|build|search|context}`.
 
@@ -84,11 +84,11 @@ Common args:
 
 How to interpret:
 - Use this when you want *control* and *visibility*.
-- If you just want “a good context blob to paste into the LLM”, use `codrag_context` instead.
+- If you just want “a good context blob to paste into the LLM”, use `codrag` instead.
 
 ---
 
-### `codrag_context`
+### `codrag`
 
 What it does:
 - Calls `POST {RAG_API_BASE}/context`
@@ -134,21 +134,21 @@ When to use:
 
 ```
 # Simple (just get context)
-codrag_context(query="How is image generation implemented?")
+codrag(query="How is image generation implemented?")
 
 # With score debugging
-codrag_context(query="notification system", include_scores=true)
+codrag(query="notification system", include_scores=true)
 
 # Structured for programmatic use
-codrag_context(query="temporal events", structured=true, k=8)
+codrag(query="temporal events", structured=true, k=8)
 
 # Tighter filtering
-codrag_context(query="Phase 70", min_score=0.25, max_chars=4000)
+codrag(query="Phase 70", min_score=0.25, max_chars=4000)
 ```
 
 **Rule of thumb:**
 - Use `codrag_search` to *debug/inspect*.
-- Use `codrag_context` to *consume*.
+- Use `codrag` to *consume*.
 
 ---
 
@@ -289,7 +289,7 @@ If you want to use `python3` instead of the venv (works only if your global pyth
 
 ## 4) Validate end-to-end
 - Call `codrag_status` (should show `loaded` and/or build state)
-- Call `codrag_context` with a query like:
+- Call `codrag` with a query like:
   - “Where is the image generation endpoint implemented?”
 
 ## Reuse in another codebase

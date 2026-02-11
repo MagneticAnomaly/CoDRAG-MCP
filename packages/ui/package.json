@@ -40,6 +40,7 @@
     "keyboard-css": "^1.2.4",
     "lucide-react": "^0.312.0",
     "react-grid-layout": "^1.4.4",
+    "react-syntax-highlighter": "^16.1.0",
     "tailwind-merge": "^2.2.0"
   },
   "devDependencies": {
@@ -53,6 +54,7 @@
     "@types/react": "^18.2.48",
     "@types/react-dom": "^18.2.18",
     "@types/react-grid-layout": "^1.3.5",
+    "@types/react-syntax-highlighter": "^15.5.13",
     "@typescript-eslint/eslint-plugin": "^6.19.1",
     "@typescript-eslint/parser": "^6.19.1",
     "@vitejs/plugin-react": "^4.2.1",
@@ -78,7 +80,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/anthropics/CoDRAG",
+    "url": "https://github.com/EricBintner/CoDRAG",
     "directory": "packages/ui"
   }
 }

@@ -87,7 +87,6 @@ export function PathInput({
         // Dynamic import so the module is only loaded inside Tauri
         // We use a variable to bypass Vite's static analysis
         const tauriDialog = '@tauri-apps/api/dialog';
-        // @ts-ignore - resolve optional dependency at runtime
         const { open } = await import(/* @vite-ignore */ tauriDialog);
         const selected = await open({ directory, multiple: false });
         if (typeof selected === 'string') onChange(selected);

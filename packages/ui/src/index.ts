@@ -15,6 +15,8 @@ export type {
   LLMConfig, 
   SavedEndpoint, 
   EndpointTestResult,
+  ModelReadinessStatus,
+  ModelStatusResult,
   ProjectStatus,
   WatchStatus,
   WatchState,
@@ -22,11 +24,21 @@ export type {
   TraceCoverageFile,
   TraceCoverageSummary,
   TraceCoverage,
+  LicenseTier,
+  LicenseInfo,
+  LicenseStatus,
+  FeatureAvailability,
+  TaskProgress,
+  LogEntry,
 } from './types';
 
 // Components - Status
-export { StatusBadge, StatusCard, BuildProgress } from './components/status';
-export type { StatusBadgeProps, StatusCardProps, BuildProgressProps } from './components/status';
+export { StatusBadge, StatusCard, BuildProgress, ProgressIndicator } from './components/status';
+export type { StatusBadgeProps, StatusCardProps, BuildProgressProps, ProgressIndicatorProps } from './components/status';
+
+// Components - Console
+export { LogConsole } from './components/console';
+export type { LogConsoleProps } from './components/console';
 
 // Components - Navigation
 export { Sidebar, ProjectList, ProjectTabs, AppShell } from './components/navigation';
@@ -45,8 +57,8 @@ export { EmptyState, LoadingState, ErrorState } from './components/patterns';
 export type { EmptyStateProps, LoadingStateProps, ErrorStateProps } from './components/patterns';
 
 // Components - Dashboard
-export { IndexStatusCard, BuildCard, IndexStatsDisplay, LLMStatusWidget } from './components/dashboard';
-export type { IndexStatusCardProps, IndexStats, BuildCardProps, IndexStatsProps, StatItem, LLMStatusWidgetProps, LLMServiceStatus } from './components/dashboard';
+export { IndexStatusCard, BuildCard, IndexStatsDisplay, LLMStatusWidget, UsageGuidePanel } from './components/dashboard';
+export type { IndexStatusCardProps, IndexStats, BuildCardProps, IndexStatsProps, StatItem, LLMStatusWidgetProps, LLMServiceStatus, UsageGuidePanelProps } from './components/dashboard';
 
 // Components - LLM
 export { ModelCard, EndpointManager, AIModelsSettings } from './components/llm';
@@ -59,8 +71,8 @@ export { PathInput } from './components/primitives/PathInput';
 export type { PathInputProps, PathPickerMode } from './components/primitives/PathInput';
 
 // Components - Project
-export { FolderTree, sampleFileTree, ProjectSettingsPanel, FolderTreePanel, PinnedTextFilesPanel, AddProjectModal, FilePreviewPane, FileExplorerDetail } from './components/project';
-export type { FolderTreeProps, TreeNode, FileStatus, ProjectSettingsPanelProps, FolderTreePanelProps, PinnedTextFilesPanelProps, PinnedTextFile, AddProjectModalProps, FilePreviewPaneProps, FileExplorerDetailProps } from './components/project';
+export { FolderTree, sampleFileTree, ProjectSettingsPanel, FolderTreePanel, PinnedTextFilesPanel, AddProjectModal, FilePreviewPane, FileExplorerDetail, CodeViewer } from './components/project';
+export type { FolderTreeProps, TreeNode, FileStatus, ProjectSettingsPanelProps, FolderTreePanelProps, PinnedTextFilesPanelProps, PinnedTextFile, AddProjectModalProps, FilePreviewPaneProps, FileExplorerDetailProps, CodeViewerProps } from './components/project';
 
 // Components - Watch (Phase 03)
 export { WatchStatusIndicator, WatchControlPanel } from './components/watch';
@@ -84,6 +96,14 @@ export type { SiteHeaderProps, SiteFooterProps, NavLink, FooterSection, FooterLi
 export { DocsLayout, DocsSidebarNav, TableOfContents } from './components/docs';
 export type { DocsLayoutProps, DocsSidebarNavProps, DocNode, TableOfContentsProps, TocItem } from './components/docs';
 
+// Components - Team (License & Server Mode)
+export { ServerModeIndicator, TeamConfigStatus, EmbeddedModeIndicator, LicenseStatusCard } from './components/team';
+export type { ServerModeIndicatorProps, TeamConfigStatusProps, EmbeddedModeIndicatorProps, LicenseStatusCardProps } from './components/team';
+
+// Components - Viz (Activity Heatmap)
+export { ActivityHeatmap, generateSampleActivityData } from './components/viz';
+export type { ActivityHeatmapProps, ActivityHeatmapData, ActivityDay } from './components/viz';
+
 // Layout Types (Phase 15)
 export type { 
   PanelConfig, 
@@ -97,6 +117,9 @@ export { DEFAULT_LAYOUT, LAYOUT_STORAGE_KEY, BASE_COLS, toGridLayout, fromGridLa
 
 // Panel Registry (Phase 15)
 export { PANEL_REGISTRY, getPanelDefinition, getPanelsByCategory } from './config/panelRegistry';
+
+// Hooks
+export { useEventStream } from './hooks/useEventStream';
 
 // API (typed client + Storybook mocking helpers)
 export * from './api';

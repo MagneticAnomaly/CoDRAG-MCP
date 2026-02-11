@@ -93,7 +93,7 @@ Search for relevant code chunks.
 Returns: List of matching code chunks with file paths, line numbers, and previews
 ```
 
-### `codrag_context`
+### `codrag`
 
 Get assembled context for LLM injection.
 

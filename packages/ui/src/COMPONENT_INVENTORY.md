@@ -297,7 +297,7 @@ export type NodeKind = 'file' | 'symbol' | 'external_module';
 export type EdgeKind = 'contains' | 'imports' | 'calls' | 'implements' | 'documented_by';
 
 // License tier
-export type LicenseTier = 'free' | 'pro' | 'team' | 'enterprise';
+export type LicenseTier = 'free' | 'starter' | 'pro' | 'team' | 'enterprise';
 
 // Team config status
 export type TeamConfigStatus = 'none' | 'applied' | 'overridden' | 'conflict';

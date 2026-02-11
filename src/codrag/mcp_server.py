@@ -10,7 +10,10 @@ Tools:
 - codrag_status: Get index status and daemon health
 - codrag_build: Trigger index build (async)
 - codrag_search: Search the index
-- codrag_context: Get assembled context for LLM injection
+- codrag: Get assembled context for LLM injection (primary tool)
+- codrag_trace_search: Search the code graph for symbols
+- codrag_trace_neighbors: Get neighbors for a trace node
+- codrag_trace_coverage: Get trace coverage statistics
 """
 
 from __future__ import annotations
@@ -464,6 +467,111 @@ class MCPServer:
 
         return result
 
+    async def tool_trace_search(
+        self,
+        query: str,
+        kind: Optional[str] = None,
+        limit: int = 20,
+    ) -> Dict[str, Any]:
+        """Search the trace index for symbols."""
+        if not query.strip():
+            raise InvalidParamsError("query is required")
+
+        try:
+            limit = int(limit)
+        except Exception:
+            raise InvalidParamsError("limit must be an integer")
+        if limit < 1:
+            raise InvalidParamsError("limit must be >= 1")
+        if limit > 100:
+            raise InvalidParamsError("limit too large (max 100)")
+
+        project_id = await self._resolve_project_id()
+        payload: Dict[str, Any] = {"query": query, "limit": limit}
+        if kind:
+            payload["kind"] = kind
+
+        data = await self._api_post(f"/projects/{project_id}/trace/search", payload)
+
+        nodes = (data or {}).get("nodes", []) if isinstance(data, dict) else []
+        formatted = []
+        for n in nodes:
+            formatted.append({
+                "id": n.get("id", ""),
+                "name": n.get("name", ""),
+                "kind": n.get("kind", ""),
+                "path": n.get("file_path", n.get("path", "")),
+                "line": n.get("start_line", n.get("line")),
+            })
+
+        return {
+            "query": query,
+            "count": len(formatted),
+            "nodes": formatted,
+        }
+
+    async def tool_trace_neighbors(
+        self,
+        node_id: str,
+        direction: str = "both",
+        edge_kinds: Optional[List[str]] = None,
+        max_nodes: int = 25,
+    ) -> Dict[str, Any]:
+        """Get neighbors for a trace node."""
+        if not node_id.strip():
+            raise InvalidParamsError("node_id is required")
+
+        if direction not in ("in", "out", "both"):
+            raise InvalidParamsError("direction must be 'in', 'out', or 'both'")
+
+        try:
+            max_nodes = int(max_nodes)
+        except Exception:
+            raise InvalidParamsError("max_nodes must be an integer")
+        if max_nodes < 1:
+            raise InvalidParamsError("max_nodes must be >= 1")
+        if max_nodes > 100:
+            raise InvalidParamsError("max_nodes too large (max 100)")
+
+        project_id = await self._resolve_project_id()
+        
+        # Build query params
+        params = [f"direction={direction}", f"max_nodes={max_nodes}"]
+        if edge_kinds:
+            params.append(f"edge_kinds={','.join(edge_kinds)}")
+        query_string = "&".join(params)
+        
+        data = await self._api_get(f"/projects/{project_id}/trace/neighbors/{node_id}?{query_string}")
+
+        # Format response
+        center = (data or {}).get("center") if isinstance(data, dict) else None
+        nodes = (data or {}).get("nodes", []) if isinstance(data, dict) else []
+        edges = (data or {}).get("edges", []) if isinstance(data, dict) else []
+
+        return {
+            "center": center,
+            "node_count": len(nodes),
+            "edge_count": len(edges),
+            "nodes": nodes[:max_nodes],
+            "edges": edges[:50],  # Cap edges for token efficiency
+        }
+
+    async def tool_trace_coverage(self) -> Dict[str, Any]:
+        """Get trace coverage statistics."""
+        project_id = await self._resolve_project_id()
+        data = await self._api_get(f"/projects/{project_id}/trace/coverage")
+
+        # Return lean summary for token efficiency
+        return {
+            "traced_count": (data or {}).get("traced_count", 0) if isinstance(data, dict) else 0,
+            "untraced_count": (data or {}).get("untraced_count", 0) if isinstance(data, dict) else 0,
+            "stale_count": (data or {}).get("stale_count", 0) if isinstance(data, dict) else 0,
+            "ignored_count": (data or {}).get("ignored_count", 0) if isinstance(data, dict) else 0,
+            "total_nodes": (data or {}).get("total_nodes", 0) if isinstance(data, dict) else 0,
+            "total_edges": (data or {}).get("total_edges", 0) if isinstance(data, dict) else 0,
+            "building": bool((data or {}).get("building", False)) if isinstance(data, dict) else False,
+        }
+
     # -------------------------------------------------------------------------
     # MCP Protocol Handlers
     # -------------------------------------------------------------------------
@@ -501,7 +609,7 @@ class MCPServer:
                     k=args.get("k", 8),
                     min_score=args.get("min_score", 0.15),
                 )
-            elif name == "codrag_context":
+            elif name == "codrag":
                 result = await self.tool_context(
                     query=args.get("query", ""),
                     k=args.get("k", 5),
@@ -511,6 +619,21 @@ class MCPServer:
                     compression_level=args.get("compression_level", "standard"),
                     compression_timeout_s=args.get("compression_timeout_s", 30.0),
                 )
+            elif name == "codrag_trace_search":
+                result = await self.tool_trace_search(
+                    query=args.get("query", ""),
+                    kind=args.get("kind"),
+                    limit=args.get("limit", 20),
+                )
+            elif name == "codrag_trace_neighbors":
+                result = await self.tool_trace_neighbors(
+                    node_id=args.get("node_id", ""),
+                    direction=args.get("direction", "both"),
+                    edge_kinds=args.get("edge_kinds"),
+                    max_nodes=args.get("max_nodes", 25),
+                )
+            elif name == "codrag_trace_coverage":
+                result = await self.tool_trace_coverage()
             else:
                 raise MethodNotFoundError(f"Unknown tool: {name}")
 

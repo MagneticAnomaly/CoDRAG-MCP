@@ -1,3 +1,5 @@
+import { Image as ImageIcon } from 'lucide-react';
+
 export default function Page() {
   return (
     <main className="min-h-screen bg-background text-text">
@@ -27,7 +29,7 @@ export default function Page() {
             <li>Runs locally — no data leaves your machine</li>
             <li>Query-aware — compression focuses on what you asked for</li>
             <li>Best-effort — if CLaRa is unavailable, CoDRAG returns uncompressed context</li>
-            <li>Works via API, MCP, and CLI</li>
+            <li>Works via API and MCP</li>
           </ul>
         </section>
 
@@ -62,6 +64,15 @@ export default function Page() {
             <div>  --gpus all \</div>
             <div>  ericbintner/clara-server:latest</div>
           </div>
+          
+          <div className="my-6 p-8 border-2 border-dashed border-border rounded-lg bg-surface-raised flex flex-col items-center justify-center text-text-muted gap-2">
+            <div className="w-12 h-12 rounded-full bg-surface border border-border flex items-center justify-center">
+              <ImageIcon className="w-6 h-6" />
+            </div>
+            <p className="font-medium">Screenshot: CLaRa Docker Terminal</p>
+            <p className="text-sm text-center">Show the terminal output of the docker container running CLaRa successfully.</p>
+          </div>
+
           <p className="mt-3 text-sm text-text-muted">
             Or run from source:
           </p>
@@ -77,7 +88,7 @@ export default function Page() {
             <div className="text-text-muted"># Health check</div>
             <div>curl http://localhost:8765/health</div>
             <div className="mt-2 text-text-muted"># Or via CoDRAG</div>
-            <div>curl http://localhost:4966/clara/status</div>
+            <div>curl http://localhost:8400/clara/status</div>
           </div>
 
           <h3 className="mt-6 text-lg font-medium">3. Configure in dashboard (optional)</h3>
@@ -85,6 +96,14 @@ export default function Page() {
             Go to <strong>Settings → AI Models → CLaRa</strong> to configure the server URL or
             download the model via HuggingFace.
           </p>
+          
+          <div className="my-6 p-8 border-2 border-dashed border-border rounded-lg bg-surface-raised flex flex-col items-center justify-center text-text-muted gap-2">
+            <div className="w-12 h-12 rounded-full bg-surface border border-border flex items-center justify-center">
+              <ImageIcon className="w-6 h-6" />
+            </div>
+            <p className="font-medium">Screenshot: Settings - CLaRa Config</p>
+            <p className="text-sm text-center">Show the AI Models Settings panel with the CLaRa section expanded and configured.</p>
+          </div>
         </section>
 
         {/* Usage */}
@@ -96,7 +115,7 @@ export default function Page() {
             Add <code>compression</code> to your context request:
           </p>
           <div className="mt-2 rounded-lg bg-surface border border-border p-4 font-mono text-sm overflow-x-auto">
-            <div>curl -X POST http://localhost:4966/projects/my-project/context \</div>
+            <div>curl -X POST http://localhost:8400/projects/my-project/context \</div>
             <div>  -H &quot;Content-Type: application/json&quot; \</div>
             <div>  -d &apos;{'{'}</div>
             <div>    &quot;query&quot;: &quot;How does authentication work?&quot;,</div>
@@ -109,7 +128,7 @@ export default function Page() {
 
           <h3 className="mt-6 text-lg font-medium">Via MCP (Cursor / Windsurf)</h3>
           <p className="mt-2 text-sm text-text-muted">
-            The <code>codrag_context</code> tool now accepts compression parameters:
+            The <code>codrag</code> tool now accepts compression parameters:
           </p>
           <div className="mt-2 rounded-lg bg-surface border border-border p-4 font-mono text-sm overflow-x-auto">
             <div>{'{'}</div>

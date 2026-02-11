@@ -11,6 +11,8 @@ from .context import render_token_budget, render_relevance_spectrum
 from .trace import render_trace_stats
 from .coverage import render_file_coverage
 from .overview import render_dashboard
+from .drift import render_drift_report
+from .flow import render_rag_flow
 
 __all__ = [
     "render_activity_heatmap",
@@ -22,4 +24,6 @@ __all__ = [
     "render_trace_stats",
     "render_file_coverage",
     "render_dashboard",
+    "render_drift_report",
+    "render_rag_flow",
 ]

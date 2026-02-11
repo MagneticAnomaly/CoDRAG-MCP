@@ -299,7 +299,7 @@ Acceptance criteria:
 Steps:
 
 1. Agent calls `codrag_status`.
-2. Agent calls `codrag_search` or `codrag_context`.
+2. Agent calls `codrag_search` or `codrag`.
 3. Agent consumes the returned context.
 
 Acceptance criteria:
@@ -318,7 +318,7 @@ Steps:
 1. Agent calls `codrag_status`.
 2. If the project index is missing/stale, agent calls `codrag_build`.
 3. Agent polls `codrag_status` until `building=false` (or receives `BUILD_ALREADY_RUNNING`).
-4. Agent calls `codrag_context` with bounded defaults.
+4. Agent calls `codrag` with bounded defaults.
 
 Acceptance criteria:
 

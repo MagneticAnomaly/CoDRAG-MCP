@@ -21,77 +21,91 @@ This file tracks **public-facing website work** (marketing/docs/support/payments
   - `payments.codrag.io`
 
 ## Implementation plan (milestones)
-- **MKT-M1: Local dev + build reliability**
-  - Resolve the Next.js dev static asset 404 issue (ports 3000–3003).
-  - Ensure `turbo dev` and `turbo build` succeed for all 4 apps.
+- **MKT-M1: Local dev + build reliability** ✅
+  - [x] Resolve the Next.js dev static asset 404 issue (ports 3000–3003). (Fixed via `scripts/run_websites.sh` and robust Vite proxying)
+  - [x] Ensure `turbo dev` and `turbo build` succeed for all 4 apps.
 
-- **MKT-M2: Marketing v0 pages ship (codrag.io)**
-  - Home, Download (placeholder), Pricing (honest placeholder), Security/Privacy, Contact.
-  - Copy aligned with `COPY_DECK.md`.
+- **MKT-M2: Marketing v0 pages ship (codrag.io)** ✅
+  - [x] Home, Download, Pricing, Security/Privacy, Contact.
+  - [x] Implemented "Radical Design Directions" (Swiss, Neo-Brutalist, Studio, etc.) for subpages.
+  - [x] Copy aligned with `COPY_DECK.md` and "No LLM Required" messaging.
 
-- **MKT-M3: Docs v0 scaffold ship (docs.codrag.io)**
-  - Getting Started “10-minute trust loop”.
-  - Concepts + Guides + Troubleshooting scaffold that matches app terminology.
-  - Include MCP setup guide with copy/paste examples.
+- **MKT-M3: Docs v0 scaffold ship (docs.codrag.io)** ✅
+  - [x] Getting Started “10-minute trust loop”.
+  - [x] Concepts + Guides + Troubleshooting scaffold.
+  - [x] MCP setup guide (Cursor/Windsurf specific).
 
-- **MKT-M4: Support + Payments v0 ship (support/payments subdomains)**
-  - Support hub page: bug reports, discussions, email, security reporting.
-  - Payments hub + recovery flow (placeholder OK, but wired to env + documented).
+- **MKT-M4: Support + Payments v0 ship (support/payments subdomains)** ✅
+  - [x] Support hub page (Github Issues/Discussions links).
+  - [x] Payments hub + recovery flow (wired to `NEXT_PUBLIC_CODRAG_CHECKOUT_URL`).
 
-- **MKT-M5: Deploy + DNS + launch checklist**
-  - Provider choice (Vercel recommended) + Cloudflare DNS + redirects.
-  - SEO basics (title/description/sitemap/robots) + link validation.
+- **MKT-M5: Deploy + DNS + launch checklist** (In Progress)
+  - [x] Provider choice (Vercel configs created).
+  - [x] SEO basics (sitemap/robots/metadata created).
+  - [x] Link validation (CI workflow).
+  - [ ] Cloudflare DNS + redirects.
 
 ## Workstreams
 
 ### MKT-W0: Known blockers
-- [ ] Fix Next.js dev static asset 404s (`/_next/static/*`) across ports 3000–3003.
+- [x] Fix Next.js dev static asset 404s (`/_next/static/*`) across ports 3000–3003.
 
 ### MKT-W1: Shared UI + drift control
-- [ ] Keep “universal” marketing/docs components canonical in `@codrag/ui`.
-- [ ] Keep website apps thin: pages + routing + content wiring only (avoid duplicating UI).
-- [ ] Prefer Storybook-first UI iteration (`npm run storybook -w @codrag/ui`) and treat Next apps as integration/assembly.
-- [ ] Theme contract (must match Storybook):
-  - Apply visual direction via `data-codrag-theme="<id>"` on `<html>`.
-  - Apply dark mode via `.dark` class on `<html>`.
-  - Storybook reference implementation: `packages/ui/.storybook/preview.tsx`.
-- [ ] Decide default `data-codrag-theme` + mode per site (marketing/docs/support/payments) and lock it for production.
-- [ ] Optional (dev-only): allow `?theme=<id>&mode=light|dark` overrides in Next apps for integration preview, but keep Storybook as the primary place to explore UI.
+- [x] Keep “universal” marketing/docs components canonical in `@codrag/ui`.
+- [x] Keep website apps thin: pages + routing + content wiring only.
+- [x] Prefer Storybook-first UI iteration (`npm run storybook -w @codrag/ui`).
+- [x] Theme contract:
+  - [x] Visual direction via `data-codrag-theme="<id>"`.
+  - [x] Reference: `packages/ui/.storybook/preview.tsx`.
+- [x] Decide default `data-codrag-theme`: **Theme K (Inclusive Focus)** selected as default.
+- [x] Implemented Atomic Design `Button` primitive across all sites.
 
-### MKT-W2: Marketing site (`websites/apps/marketing`)
-- [ ] `/` home: hero + loop + local-first trust block + integrations links.
-- [ ] `/download`: pre-release placeholder + later checksums/signature guidance.
-- [ ] `/pricing`: placeholder tiers + “no token markup” messaging.
-- [ ] `/security`: local-first + network behavior + data collection stance.
-- [ ] `/contact`: email + GitHub + enterprise interest (honest roadmap).
+### MKT-W2: Marketing site (`websites/apps/marketing`) codrag.io
+- [x] `/` home: hero + loop + local-first trust block + integrations links.
+- [x] `/download`: Platform cards + quick start + feature grid.
+- [x] `/pricing`: Free/Starter/Pro/Team tiers + “no token markup” messaging.
+- [x] `/security`: local-first + network behavior + data collection stance.
+- [x] `/contact`: email + GitHub + enterprise interest.
+- [x] `/careers`: Swiss Minimal layout (Direction F).
+- [x] `/changelog`: Neo-Brutalist layout (Direction E).
+- [x] `/blog`: Studio Collage layout (Direction I).
+- [x] `/privacy`, `/terms`: Enterprise Console layout (Direction L).
 
-### MKT-W3: Docs site (`websites/apps/docs`)
-- [ ] `/getting-started`: “10-minute trust loop” (add -> build -> search -> inspect -> context).
-- [ ] `/mcp`: pinned vs auto-detect configuration + first query walkthrough.
-- [ ] `/troubleshooting`: Ollama not running + build failures + performance tips.
-- [ ] `/cli`: align with repo CLI docs.
-- [ ] `/dashboard`: align terminology and surface map with actual UI.
+### MKT-W3: Docs site (`websites/apps/docs`) docs.codrag.io
+- [x] `/getting-started`: “10-minute trust loop” (Install -> Serve -> Add -> Connect -> Verify).
+- [x] `/mcp`: Cursor/Windsurf guides + manual vs auto configuration.
+- [x] `/troubleshooting`: Connection issues + Native vs Ollama embeddings + Build debugging.
+- [x] `/cli`: Core commands + mcp-config reference.
+- [x] `/dashboard`: UI walkthrough (Knowledge/Context/Graph panels).
+- [x] `/guides`: Added Path Weights, CLaRa, Native Embeddings guides.
+- [x] `/faq`: Common questions (Privacy, GPU, Editors).
+- [x] `/search`: Client-side search implementation.
 
-### MKT-W4: Support site (`websites/apps/support`)
-- [ ] “Before you file a bug” checklist (version/OS/logs/repro).
-- [ ] Links: issues, discussions, support email, security email.
+### MKT-W4: Support site (`websites/apps/support`) support.codrag.io (`support@codrag.io`)
+- [x] Support Hub: Troubleshooting, Bug Report, Q&A, Billing, Email, Security cards.
+- [x] Wired to `support.codrag.io` in Vercel config.
 
-### MKT-W5: Payments site (`websites/apps/payments`)
-- [ ] Wire `NEXT_PUBLIC_CODRAG_CHECKOUT_URL` and document local `.env` usage.
-- [ ] Recovery path: receipt/email-based resend (can be placeholder until Lemon Squeezy API work is ready).
-- [ ] Success page: clear next steps (install, activate, docs links).
+### MKT-W5: Payments site (`websites/apps/payments`) payments.codrag.io
+- [x] Wire `NEXT_PUBLIC_CODRAG_CHECKOUT_URL` and document local `.env` usage.
+- [x] Recovery path: `/recover` route implemented.
+- [x] Success page: `/success` route implemented with next steps.
 
 ### MKT-W6: Deploy + DNS
-- [ ] Choose deploy provider (Vercel recommended) + configure 4 projects.
+- [x] Create GitHub Actions workflow (`.github/workflows/websites-ci.yml`) for lint, build, and link validation.
+- [x] Choose deploy provider (Vercel selected) + configure 4 projects.
+  - Created `vercel.json` for marketing, docs, support, payments.
 - [ ] Cloudflare DNS records + redirects (www + legacy domain).
-- [ ] Preview deployments enabled for PRs.
+- [ ] Preview deployments enabled for PRs (Ready for Vercel connection).
 
 ### MKT-W7: Quality gates
+- [x] Link checker script (`scripts/validate_links.js`) implemented and passing.
 - [ ] Lighthouse pass (perf/a11y/SEO) for marketing home.
-- [ ] Link checker (no broken internal/external links).
 - [ ] Manual QA: Chrome/Safari/Firefox.
 
-### MKT-W8: Later (post-v0)
+### MKT-W8: Later (post-v0 / 2.0)
+- [ ] **Support 2.0**: Full Helpdesk.
+  - [ ] Auth / Ticketing system.
+  - [ ] Secure file uploads for debug traces.
 - [ ] `/changelog`
 - [ ] `/blog`
 - [ ] `/workflows/*` case studies

@@ -45,7 +45,7 @@ Wireframe sections:
 - Integrations
   - MCP mention + link to docs
 - Deployment reality (short)
-  - macOS/Windows desktop app
+  - macOS/Windows/linux desktop app
   - note about signed installers
 - Footer
   - Links: Docs, Download, Security, Contact
@@ -93,18 +93,12 @@ Sections:
 - `/enterprise` (roadmap + posture + “talk to us”)
 
 ## Support IA (v0)
-Hosted at `support.codrag.io`.
+Hosted at `codrag.io/contact` (formerly `support.codrag.io`).
 
 Primary entry options:
-- Troubleshooting (link to `docs.codrag.io`)
-- Report a bug (link to GitHub Issue Form)
-- Ask a question (link to GitHub Discussions Q&A)
-- Billing / license help (link to `payments.codrag.io` + contact email)
-
-V0 support hub sections:
-- “Before you file a bug” checklist (version, OS, logs, repro)
-- Links to GitHub Issues, GitHub Discussions, and contact email
-- Security reporting link
+- Community Support (GitHub Discussions)
+- Private Inquiries (Email support@codrag.io)
+- Self-service links (Docs, Pricing, Privacy)
 
 ## Payments IA (v0)
 Hosted at `payments.codrag.io`.

@@ -2,6 +2,7 @@ import { Pin, PinOff, FileText } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Button } from '../primitives/Button';
 import { CopyButton } from '../context/CopyButton';
+import { CodeViewer } from './CodeViewer';
 
 export interface FilePreviewPaneProps {
   path: string | null;
@@ -46,14 +47,14 @@ export function FilePreviewPane({
             variant={isPinned ? 'default' : 'outline'}
             size="sm"
             onClick={() => (isPinned ? onUnpin?.(path) : onPin?.(path))}
-            title={isPinned ? 'Unpin from dashboard' : 'Pin to dashboard'}
+            title={isPinned ? 'Unpin from dashboard' : 'Pin file to dashboard'}
           >
             {isPinned ? (
               <PinOff className="w-3.5 h-3.5 mr-1.5" />
             ) : (
               <Pin className="w-3.5 h-3.5 mr-1.5" />
             )}
-            {isPinned ? 'Unpin' : 'Pin'}
+            {isPinned ? 'Unpin from Dashboard' : 'Pin to Dashboard'}
           </Button>
         </div>
       </div>
@@ -68,9 +69,11 @@ export function FilePreviewPane({
           {error}
         </div>
       ) : (
-        <pre className="flex-1 min-h-0 p-4 text-xs whitespace-pre-wrap font-mono text-text overflow-y-auto custom-scrollbar">
-          {content ?? ''}
-        </pre>
+        <CodeViewer 
+          content={content ?? ''} 
+          path={path}
+          className="h-full border-0 rounded-none"
+        />
       )}
     </div>
   );

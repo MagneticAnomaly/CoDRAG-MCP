@@ -30,6 +30,7 @@ This folder is the **authoritative** planning and execution roadmap for CoDRAG.
 - `Phase14_MCP-CLI/`
 - `Phase15_modular-design/`
 - `Phase16_DataVisualization/`
+- `Phase19_Alt-Dev-Workflows/`
 
 ## Key transition document
 - `TRANSITION_FROM_LINUXBRAIN.md`

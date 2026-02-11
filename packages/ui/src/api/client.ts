@@ -14,7 +14,7 @@ import type {
   SearchResponse,
   WatchActionResponse,
 } from './types';
-import type { LLMStatus, Project, ProjectStatus, TraceCoverage, TraceStatus, WatchStatus } from '../types';
+import type { LLMStatus, LicenseStatus, Project, ProjectStatus, TraceCoverage, TraceStatus, WatchStatus, GlobalConfig, ModelStatusResult, ModelReadinessStatus } from '../types';
 
 export interface FileTreeNode {
   name: string;
@@ -57,6 +57,7 @@ export interface ApiClient {
   getProjectRoots(projectId: string): Promise<{ roots: string[] }>;
   getProjectFiles(projectId: string, path?: string, depth?: number): Promise<{ path: string; tree: FileTreeNode[] }>;
   getProjectFileContent(projectId: string, path: string): Promise<{ content: string; path: string; size: number }>;
+  detectStack(projectId: string): Promise<{ recommended_globs: string[]; detected_presets: string[]; all_presets: Record<string, string[]> }>;
 
   // Watch
   startWatch(projectId: string): Promise<WatchActionResponse>;
@@ -69,6 +70,32 @@ export interface ApiClient {
 
   // LLM
   getLLMStatus(): Promise<LLMStatus>;
+
+  // Embedding
+  getEmbeddingStatus(): Promise<{ available: boolean; model: string; dim: number; downloaded: boolean }>;
+  downloadEmbedding(): Promise<{ status: string }>;
+
+  // CLaRa
+  getClaraStatus(): Promise<{ enabled: boolean; url: string; connected: boolean; model?: string }>;
+  getClaraHealth(): Promise<{ healthy: boolean }>;
+
+  // Activity & Coverage
+  getProjectActivity(projectId: string, weeks?: number): Promise<{ weeks: any[]; total_builds: number }>;
+  getProjectCoverage(projectId: string): Promise<{ tree: any[] }>;
+
+  // License
+  getLicense(): Promise<LicenseStatus>;
+
+  // Global Config
+  getGlobalConfig(): Promise<GlobalConfig>;
+  updateGlobalConfig(config: GlobalConfig): Promise<GlobalConfig>;
+
+  // LLM Proxy
+  testLLMConnectivity(): Promise<{ ollama: { connected: boolean }; clara: { connected: boolean } }>;
+  testLLMEndpoint(provider: string, url: string, apiKey?: string): Promise<{ success: boolean; models?: string[] }>;
+  fetchLLMModels(provider: string, url: string, apiKey?: string): Promise<{ models: string[] }>;
+  testLLMModel(provider: string, url: string, model: string, kind: string, apiKey?: string): Promise<{ success: boolean; message: string; model_status?: ModelReadinessStatus }>;
+  getModelStatus(provider: string, url: string, model: string, ensureReady?: boolean, apiKey?: string): Promise<ModelStatusResult>;
 }
 
 export interface ApiClientConfig {
@@ -219,8 +246,15 @@ export class CodragApiClient implements ApiClient {
   }
 
   async getProjectFileContent(projectId: string, path: string): Promise<{ content: string; path: string; size: number }> {
-    return this.requestEnvelope<{ content: string; path: string; size: number }>(
+    const data = await this.requestEnvelope<{ file: { content: string; path: string; bytes: number } }>(
       `/projects/${encodeURIComponent(projectId)}/file?path=${encodeURIComponent(path)}`
+    );
+    return { content: data.file.content, path: data.file.path, size: data.file.bytes };
+  }
+
+  async detectStack(projectId: string): Promise<{ recommended_globs: string[]; detected_presets: string[]; all_presets: Record<string, string[]> }> {
+    return this.requestEnvelope<{ recommended_globs: string[]; detected_presets: string[]; all_presets: Record<string, string[]> }>(
+      `/projects/${encodeURIComponent(projectId)}/detect-stack`
     );
   }
 
@@ -261,6 +295,96 @@ export class CodragApiClient implements ApiClient {
 
   async getLLMStatus(): Promise<LLMStatus> {
     return this.requestEnvelope<LLMStatus>('/llm/status');
+  }
+
+  // ── License ────────────────────────────────────────────────
+
+  async getLicense(): Promise<LicenseStatus> {
+    return this.requestEnvelope<LicenseStatus>('/license');
+  }
+
+  // ── Embedding ────────────────────────────────────────────
+
+  async getEmbeddingStatus(): Promise<{ available: boolean; model: string; dim: number; downloaded: boolean }> {
+    return this.requestEnvelope<{ available: boolean; model: string; dim: number; downloaded: boolean }>('/embedding/status');
+  }
+
+  async downloadEmbedding(): Promise<{ status: string }> {
+    return this.requestEnvelope<{ status: string }>('/embedding/download', { method: 'POST' });
+  }
+
+  // ── CLaRa ─────────────────────────────────────────────────
+
+  async getClaraStatus(): Promise<{ enabled: boolean; url: string; connected: boolean; model?: string }> {
+    return this.requestEnvelope<{ enabled: boolean; url: string; connected: boolean; model?: string }>('/clara/status');
+  }
+
+  async getClaraHealth(): Promise<{ healthy: boolean }> {
+    return this.requestEnvelope<{ healthy: boolean }>('/clara/health');
+  }
+
+  // ── Activity & Coverage ──────────────────────────────────
+
+  async getProjectActivity(projectId: string, weeks = 12): Promise<{ weeks: any[]; total_builds: number }> {
+    return this.requestEnvelope<{ weeks: any[]; total_builds: number }>(
+      `/projects/${encodeURIComponent(projectId)}/activity`,
+      { query: { weeks } }
+    );
+  }
+
+  async getProjectCoverage(projectId: string): Promise<{ tree: any[] }> {
+    return this.requestEnvelope<{ tree: any[] }>(`/projects/${encodeURIComponent(projectId)}/coverage`);
+  }
+
+  // ── LLM Proxy ─────────────────────────────────────────────
+
+  async testLLMConnectivity(): Promise<{ ollama: { connected: boolean }; clara: { connected: boolean } }> {
+    return this.requestEnvelope<{ ollama: { connected: boolean }; clara: { connected: boolean } }>('/llm/test', {
+      method: 'POST',
+    });
+  }
+
+  async testLLMEndpoint(provider: string, url: string, apiKey?: string): Promise<{ success: boolean; models?: string[] }> {
+    return this.requestEnvelope<{ success: boolean; models?: string[] }>('/api/llm/proxy/test', {
+      method: 'POST',
+      body: { provider, url, api_key: apiKey },
+    });
+  }
+
+  async fetchLLMModels(provider: string, url: string, apiKey?: string): Promise<{ models: string[] }> {
+    return this.requestEnvelope<{ models: string[] }>('/api/llm/proxy/models', {
+      method: 'POST',
+      body: { provider, url, api_key: apiKey },
+    });
+  }
+
+  async testLLMModel(provider: string, url: string, model: string, kind: string, apiKey?: string): Promise<{ success: boolean; message: string; model_status?: ModelReadinessStatus }> {
+    return this.requestEnvelope<{ success: boolean; message: string; model_status?: ModelReadinessStatus }>('/api/llm/proxy/test-model', {
+      method: 'POST',
+      body: { provider, url, api_key: apiKey, model, kind },
+    });
+  }
+
+  async getModelStatus(provider: string, url: string, model: string, ensureReady = false, apiKey?: string): Promise<ModelStatusResult> {
+    return this.requestEnvelope<ModelStatusResult>('/api/llm/model-status', {
+      method: 'POST',
+      body: { provider, url, model, api_key: apiKey, ensure_ready: ensureReady },
+    });
+  }
+
+  // ── Global Config ──────────────────────────────────────────
+
+  async getGlobalConfig(): Promise<GlobalConfig> {
+    // Note: The backend endpoint is currently under /api/code-index/config
+    // We might want to move this to a more generic path later
+    return this.requestEnvelope<GlobalConfig>('/api/code-index/config');
+  }
+
+  async updateGlobalConfig(config: GlobalConfig): Promise<GlobalConfig> {
+    return this.requestEnvelope<GlobalConfig>('/api/code-index/config', {
+      method: 'PUT',
+      body: config,
+    });
   }
 
   private async requestEnvelope<T>(

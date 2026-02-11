@@ -49,7 +49,7 @@ The public GitHub repo should be “complete enough” that a security-conscious
   - **What data is stored**: location of index (e.g. `<repo_root>/.codrag/index`).
   - **What never leaves the machine**: file contents, paths (state this precisely).
   - **Quickstart**: install + `codrag mcp --mode direct` + IDE config examples.
-  - **Tool surface**: list MCP tools (`codrag_status`, `codrag_build`, `codrag_search`, `codrag_context`, etc) with inputs/outputs.
+  - **Tool surface**: list MCP tools (`codrag_status`, `codrag_build`, `codrag_search`, `codrag` (context), etc) with inputs/outputs.
   - **Compatibility**: MCP protocol version (currently `2025-11-25`) and supported clients.
 
 ### 2) Security posture

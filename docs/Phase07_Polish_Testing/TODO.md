@@ -23,8 +23,10 @@
 - [ ] P07-I6 Disk pressure detection → fail early with `DISK_FULL`/`INSUFFICIENT_SPACE`
 
 ### Cross-cutting gaps already identified
-- [ ] Resolve envelope helper duplication (`src/codrag/api/envelope.py` vs `src/codrag/api/responses.py`) and ensure single source of truth
-- [ ] Test/runtime alignment: ensure `pytest` works out-of-the-box (either add missing dev deps or simplify default pytest config)
+- [x] Resolve envelope helper duplication ✅
+  - `api/responses.py` deleted (was dead code), `api/envelope.py` is the single source of truth
+- [x] Test/runtime alignment: ensure `pytest` works out-of-the-box ✅
+  - Removed `--cov` flags from `pyproject.toml` addopts that crashed without pytest-cov
 
 ### Observability + troubleshooting
 - [ ] P07-I7 Logging plan:
@@ -53,9 +55,12 @@
 
 ## Cross-phase strategy alignment
 Relevant entries in `../MASTER_TODO.md`:
-- [ ] STR-01 API envelope + error model
-- [ ] STR-04 Atomic build + last-known-good snapshot
-- [ ] STR-05 Output budgets + backpressure
+- [x] STR-01 API envelope + error model ✅
+  - Implemented: `ApiException`, `ok()` helper, `{success, data, error}` envelope
+- [x] STR-04 Atomic build + last-known-good snapshot ✅
+  - Implemented: `CodeIndex._swap_index_dir()`, temp-dir swap
+- [x] STR-05 Output budgets + backpressure ✅
+  - Documented in `docs/BUDGETS_POLICY.md`
 
 ## Notes / blockers
 - [ ] Decide CI matrix minimum (macOS/Linux now; Windows before Phase08)

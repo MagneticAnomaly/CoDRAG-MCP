@@ -2,6 +2,7 @@ import { Search } from 'lucide-react';
 import { Card, Flex, Title, TextInput } from '@tremor/react';
 import { Button } from '../primitives/Button';
 import { StepperNumberInput } from '../primitives/StepperNumberInput';
+import { InfoTooltip } from '../primitives/InfoTooltip';
 import { cn } from '../../lib/utils';
 import type { KeyboardEvent } from 'react';
 
@@ -55,7 +56,7 @@ export function SearchPanel({
         <Flex justifyContent="between" alignItems="center" className="mb-4">
           <div className="flex items-center gap-2">
             <Search className="w-5 h-5 text-primary" />
-            <Title className="text-text">Semantic Search</Title>
+            <Title className="text-text">Knowledge Query</Title>
           </div>
         </Flex>
       )}
@@ -63,14 +64,14 @@ export function SearchPanel({
       <div className="space-y-6">
         <div>
           <label className="block text-sm font-medium text-text-muted mb-2">
-            Search Query
+            Concept / Question
           </label>
           <TextInput
             icon={Search}
             value={query}
             onValueChange={onQueryChange}
             onKeyDown={handleKeyDown}
-            placeholder="Search your codebase semantically..."
+            placeholder="Search for concepts, definitions, or questions..."
             disabled={disabled}
             className="w-full"
           />
@@ -78,15 +79,21 @@ export function SearchPanel({
         
         <div className="flex flex-wrap gap-4 items-end">
           <div className="flex-1 min-w-[12rem]">
-            <label className="block text-sm font-medium text-text-muted mb-2">
-              Results (K)
-            </label>
+            <div className="flex items-center gap-2 mb-2">
+              <label className="block text-sm font-medium text-text-muted">
+                Results (K)
+              </label>
+              <InfoTooltip content="The maximum number of relevant code chunks to retrieve from the knowledge base." />
+            </div>
             <StepperNumberInput value={k} onValueChange={onKChange} min={1} max={50} disabled={disabled} />
           </div>
           <div className="flex-1 min-w-[12rem]">
-            <label className="block text-sm font-medium text-text-muted mb-2">
-              Min Score
-            </label>
+            <div className="flex items-center gap-2 mb-2">
+              <label className="block text-sm font-medium text-text-muted">
+                Min Score
+              </label>
+              <InfoTooltip content="Relevance threshold (0.0 - 1.0). Higher values return fewer, more precise results. Lower values include more broad matches." />
+            </div>
             <StepperNumberInput value={minScore} onValueChange={onMinScoreChange} min={0} max={1} step={0.05} disabled={disabled} />
           </div>
           <Button

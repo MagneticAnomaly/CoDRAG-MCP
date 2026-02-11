@@ -1,3 +1,5 @@
+import { Image as ImageIcon } from 'lucide-react';
+
 export default function Page() {
   return (
     <main className="min-h-screen bg-background text-text">
@@ -68,6 +70,15 @@ export default function Page() {
             In the project&apos;s <strong>FolderTree</strong> panel, each file and folder shows a
             weight badge. Click the badge to edit the weight:
           </p>
+          
+          <div className="my-6 p-8 border-2 border-dashed border-border rounded-lg bg-surface-raised flex flex-col items-center justify-center text-text-muted gap-2">
+            <div className="w-12 h-12 rounded-full bg-surface border border-border flex items-center justify-center">
+              <ImageIcon className="w-6 h-6" />
+            </div>
+            <p className="font-medium">Screenshot: Path Weight Badges</p>
+            <p className="text-sm text-center">Show the FolderTree panel with various colored badges (green boost, red suppress, blue manual) on files/folders.</p>
+          </div>
+
           <ul className="mt-4 space-y-2 text-sm text-text-muted list-disc pl-5">
             <li><strong>Grey badge</strong> — inherited from parent (no override)</li>
             <li><strong>Blue badge</strong> — explicitly set weight</li>
@@ -85,7 +96,7 @@ export default function Page() {
 
           <h3 className="mt-6 text-lg font-medium">Set weights</h3>
           <div className="mt-2 rounded-lg bg-surface border border-border p-4 font-mono text-sm overflow-x-auto">
-            <div>curl -X PUT http://localhost:4966/projects/my-project/path_weights \</div>
+            <div>curl -X PUT http://localhost:8400/projects/my-project/path_weights \</div>
             <div>  -H &quot;Content-Type: application/json&quot; \</div>
             <div>  -d &apos;{'{'}</div>
             <div>    &quot;path_weights&quot;: {'{'}</div>
@@ -99,7 +110,7 @@ export default function Page() {
 
           <h3 className="mt-6 text-lg font-medium">Get weights</h3>
           <div className="mt-2 rounded-lg bg-surface border border-border p-4 font-mono text-sm overflow-x-auto">
-            <div>curl http://localhost:4966/projects/my-project/path_weights</div>
+            <div>curl http://localhost:8400/projects/my-project/path_weights</div>
           </div>
         </section>
 

@@ -14,9 +14,21 @@ from typing import Generator
 import pytest
 
 
+import os
+
 _SRC = Path(__file__).resolve().parent.parent / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
+
+
+@pytest.fixture(autouse=True)
+def _unlock_all_features(monkeypatch):
+    """Set CODRAG_TIER=pro for all tests so feature gates don't block integration tests."""
+    monkeypatch.setenv("CODRAG_TIER", "pro")
+    from codrag.core.feature_gate import clear_license_cache
+    clear_license_cache()
+    yield
+    clear_license_cache()
 
 
 @pytest.fixture

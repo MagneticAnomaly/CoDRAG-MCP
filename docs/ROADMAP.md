@@ -33,6 +33,8 @@ Workflow backbone:
 | 11 | Deployment | TBD | TBD |
 | 12 | Marketing / Docs / Website | TBD | TBD |
 | 13 | Storybook | TBD | TBD |
+| 16 | Context Intelligence | TBD | TBD |
+| 19 | Alt Dev Workflows (Context MVC) | TBD | TBD |
 
 **Total: ~12 weeks to MVP**
 
@@ -287,7 +289,7 @@ curl http://localhost:8400/projects/test/trace/search \
   - `codrag_status` — index status
   - `codrag_build` — trigger build
   - `codrag_search` — semantic search
-  - `codrag_context` — assemble context
+  - [x] `codrag` tool (smart context assembly)
   - `codrag_trace` — symbol lookup
 
 - [ ] **Config generator**
@@ -489,6 +491,7 @@ curl http://localhost:8400/projects/test/trace/search \
 - [ ] **LLM augmentation** — Per-symbol summaries
 - [ ] **Diff-aware search** — "What changed that relates to X?"
 - [ ] **Graph visualization** — Interactive code map
+- [ ] **Alt Dev Workflows (Phase 19)** — Context MVC for Gemini CLI / Qwen Code
 - [ ] **Custom embeddings** — BYOK embedding models
 - [ ] **Plugin system** — Custom analyzers
 

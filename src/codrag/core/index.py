@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 import numpy as np
+import pathspec
 
 from .chunking import Chunk, chunk_code, chunk_markdown
 from .embedder import Embedder
@@ -119,6 +120,7 @@ class CodeIndex:
             "total_documents": len(self._documents or []),
             "embedding_dim": int(self._embeddings.shape[1]) if self._embeddings is not None else 0,
             "config": self._manifest.get("config", {}),
+            "build": self._manifest.get("build", {}),
         }
 
     def build(
@@ -128,6 +130,8 @@ class CodeIndex:
         include_globs: Optional[List[str]] = None,
         exclude_globs: Optional[List[str]] = None,
         max_file_bytes: int = 500_000,
+        hard_limit_bytes: int = 100_000_000,
+        use_gitignore: bool = True,
         progress_callback: Optional[Callable[[str, int, int], None]] = None,
     ) -> Dict[str, Any]:
         """
@@ -137,7 +141,8 @@ class CodeIndex:
             repo_root: Root directory to index
             include_globs: Glob patterns for files to include (default: ["**/*.md", "**/*.py"])
             exclude_globs: Glob patterns for files to exclude
-            max_file_bytes: Skip files larger than this
+            max_file_bytes: Files larger than this are summarized/truncated
+            hard_limit_bytes: Files larger than this are completely skipped
             progress_callback: Optional callback(file_path, current, total)
 
         Returns:
@@ -205,6 +210,18 @@ class CodeIndex:
                 if h:
                     prev_hash_by_source[sp] = h
 
+        # Load .gitignore if requested
+        gitignore_spec = None
+        if use_gitignore:
+            gitignore_path = repo_root / ".gitignore"
+            if gitignore_path.exists():
+                try:
+                    with open(gitignore_path, "r", encoding="utf-8") as f:
+                        gitignore_spec = pathspec.PathSpec.from_lines("gitwildmatch", f)
+                    logger.info("Loaded .gitignore from %s", gitignore_path)
+                except Exception as e:
+                    logger.warning("Failed to parse .gitignore: %s", e)
+
         selected_roots: Optional[List[str]] = None
         if roots:
             cleaned = [str(r).strip().strip("/") for r in roots]
@@ -240,8 +257,18 @@ class CodeIndex:
                 continue
             if any(Path(rel_path).match(pat) for pat in exclude_globs):
                 continue
-            if f.stat().st_size > max_file_bytes:
+            
+            # Check gitignore
+            if gitignore_spec and gitignore_spec.match_file(rel_path):
                 continue
+            
+            # Guardrail: Strictly skip files above hard limit
+            try:
+                if f.stat().st_size > hard_limit_bytes:
+                    continue
+            except OSError:
+                continue
+                
             filtered_files.append(f)
 
         docs: List[Dict[str, Any]] = []
@@ -253,6 +280,14 @@ class CodeIndex:
         files_embedded = 0
         chunks_reused = 0
         chunks_embedded = 0
+
+        # Stats counters
+        lines_scanned = 0
+        lines_indexed = 0
+        files_docs = 0
+        files_code = 0
+        lines_docs = 0
+        lines_code = 0
 
         # Count deleted files (in previous index but not in current scan)
         current_rel_paths = set()
@@ -270,17 +305,46 @@ class CodeIndex:
             if progress_callback:
                 progress_callback(rel_path, i + 1, total_files)
 
+            # Check size for summarization vs full indexing
+            file_size = 0
             try:
-                raw = file_path.read_text(encoding="utf-8", errors="ignore")
+                file_size = file_path.stat().st_size
+            except OSError:
+                pass
+            
+            is_large = file_size > max_file_bytes
+            
+            try:
+                if is_large:
+                    # For large files, read only a prefix for the "summary"
+                    # Read first 50KB to get header/intro
+                    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                        raw = f.read(50_000)
+                else:
+                    raw = file_path.read_text(encoding="utf-8", errors="ignore")
             except Exception:
                 continue
 
-            file_hash = stable_file_hash(raw)
+            # Stats: count lines and classify type
+            line_count = raw.count('\n') + 1 if raw else 0
+            lines_scanned += line_count
+            
+            is_doc = file_path.suffix.lower() in (".md", ".markdown", ".txt", ".rst", ".adoc")
+            if is_doc:
+                files_docs += 1
+                lines_docs += line_count
+            else:
+                files_code += 1
+                lines_code += line_count
+
+            file_hash = stable_file_hash(raw) # Note: For large files, hash is based on prefix
             current_file_hashes[rel_path] = file_hash
 
             if can_reuse:
                 prev_hash = prev_hash_by_source.get(rel_path)
                 if prev_hash and prev_hash == file_hash:
+                    # Even if it's large, if prefix hash matches, we assume reuse is safe
+                    # (or we accept the collision risk for perf)
                     idxs = prev_by_source.get(rel_path) or []
                     for di in idxs:
                         prev_doc = dict(prev_docs[int(di)])
@@ -291,10 +355,42 @@ class CodeIndex:
 
                     files_reused += 1
                     chunks_reused += len(idxs)
+                    lines_indexed += line_count
                     continue
 
             files_embedded += 1
+            lines_indexed += line_count
 
+            if is_large:
+                # Create a single summary chunk
+                summary_text = f"[LARGE FILE: {file_size / 1_000_000:.2f} MB - CONTENT TRUNCATED]\n{raw}"
+                # We can't really chunk it intelligently if we only have partial content,
+                # so we treat it as one big block or maybe a few chunks.
+                # Let's just make one summary chunk for now.
+                
+                # Create a synthetic chunk
+                chunk_id = stable_file_hash(rel_path + ":summary")
+                
+                # Embed the summary
+                emb = self.embedder.embed(summary_text[:8000]).vector # Limit embedding input
+                
+                doc = {
+                    "id": chunk_id,
+                    "source_path": rel_path,
+                    "file_hash": file_hash,
+                    "role": role,
+                    "section": "FILE_SUMMARY",
+                    "span": None,
+                    "content": summary_text,
+                    "truncated": True,
+                    "original_size": file_size
+                }
+                docs.append(doc)
+                vectors.append(emb)
+                chunks_embedded += 1
+                continue
+
+            # Normal processing for small files
             if file_path.suffix.lower() in (".md", ".markdown"):
                 chunks = chunk_markdown(raw, source_path=rel_path)
             else:
@@ -357,6 +453,12 @@ class CodeIndex:
                     chunks_total=len(docs),
                     chunks_reused=chunks_reused,
                     chunks_embedded=chunks_embedded,
+                    lines_scanned=lines_scanned,
+                    lines_indexed=lines_indexed,
+                    files_docs=files_docs,
+                    files_code=files_code,
+                    lines_docs=lines_docs,
+                    lines_code=lines_code,
                 ),
                 file_hashes=current_file_hashes,
                 config={

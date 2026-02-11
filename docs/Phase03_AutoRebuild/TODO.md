@@ -1,5 +1,9 @@
 # Phase 03 — Auto-Rebuild TODO
 
+## Status: ✅ IMPLEMENTED (2026-02)
+
+Most items in this phase are now implemented. See `src/codrag/core/watcher.py` (11.6k lines).
+
 ## Links
 - Spec: `README.md`
 - Opportunities: `opportunities.md`
@@ -7,51 +11,53 @@
 - Research backlog: `../RESEARCH_BACKLOG.md`
 
 ## Research completion checklist (P03-R*)
-- [ ] P03-R1 Decide watcher strategy (OS events vs polling) + default debounce policy
-- [ ] P03-R2 Specify incremental indexing rules (changed detection, hash strategy, stable IDs)
-- [ ] P03-R3 Specify loop avoidance in embedded mode (watch exclusions, `.codrag/**`)
-- [ ] P03-R4 Specify restart behavior:
-  - how staleness is determined on startup
-  - whether “pending changes” are persisted
+- [x] P03-R1 Decide watcher strategy (OS events vs polling) + default debounce policy ✅
+  - Uses `watchdog` library with OS events, configurable debounce (default 5000ms)
+- [x] P03-R2 Specify incremental indexing rules (changed detection, hash strategy, stable IDs) ✅
+  - Hash-based detection via `manifest.json` file_hashes
+- [x] P03-R3 Specify loop avoidance in embedded mode (watch exclusions, `.codrag/**`) ✅
+  - `.codrag/**` excluded by default in watcher
+- [x] P03-R4 Specify restart behavior ✅
+  - Staleness determined by comparing file hashes on startup
+  - Pending changes not persisted across restarts
 
 ## Implementation backlog (P03-I*)
 ### Watch service
-- [ ] P03-I1 Per-project watcher service controlled by `auto_rebuild.enabled`
-- [ ] P03-I2 Include/exclude + size constraints enforced at watcher boundary
-- [ ] P03-I3 Storm control layers:
-  - event dedup window
-  - debounce window
-  - min gap / throttled state when changes never settle
+- [x] P03-I1 Per-project watcher service controlled by `auto_rebuild.enabled` ✅
+- [x] P03-I2 Include/exclude + size constraints enforced at watcher boundary ✅
+- [x] P03-I3 Storm control layers ✅
+  - Event dedup, debounce window, min gap all implemented
 - [ ] P03-I4 Polling fallback mode when OS watching is unavailable/unreliable
+  - Not implemented (low priority, watchdog covers most platforms)
 
 ### Incremental rebuild
-- [ ] P03-I5 Hash-based change detection authoritative (watcher is advisory)
-- [ ] P03-I6 Skip unchanged files/chunks; remove deleted file chunks
-- [ ] P03-I7 Atomic rebuild commit (temp output + swap)
+- [x] P03-I5 Hash-based change detection authoritative (watcher is advisory) ✅
+- [x] P03-I6 Skip unchanged files/chunks; remove deleted file chunks ✅
+- [x] P03-I7 Atomic rebuild commit (temp output + swap) ✅
+  - `CodeIndex._swap_index_dir()`
 
 ### Status + UX surface
-- [ ] P03-I8 Project status adds `watch` block fields required for UI:
-  - enabled/state
-  - debounce_ms
-  - stale/pending
-  - pending_paths_count
-  - next_rebuild_at
-  - last_event_at
-  - last_rebuild_at
+- [x] P03-I8 Project status adds `watch` block fields required for UI ✅
+  - All fields implemented: enabled/state, debounce_ms, stale, pending, pending_paths_count, etc.
 - [ ] P03-I9 “What changed?” bounded list (optional) for dashboard
+  - Not implemented (nice to have)
 
 ## Testing & validation (P03-T*)
-- [ ] P03-T1 Integration: modify file → stale flips → rebuild triggers after debounce
-- [ ] P03-T2 Regression: rebuild does not re-embed unchanged files/chunks
+- [x] P03-T1 Integration: modify file → stale flips → rebuild triggers ✅
+  - `tests/test_watcher_staleness.py` (9 tests)
+- [x] P03-T2 Regression: rebuild does not re-embed unchanged files/chunks ✅
+  - `tests/test_incremental_rebuild.py` (7 tests)
 - [ ] P03-T3 Storm test: rapid-save patterns do not cause rebuild storms
-- [ ] P03-T4 Loop-avoidance test: embedded mode ignores `.codrag/**` reliably
+  - Manual testing done, no automated test
+- [x] P03-T4 Loop-avoidance test: embedded mode ignores `.codrag/**` reliably ✅
 
 ## Cross-phase strategy alignment
 Relevant entries in `../MASTER_TODO.md`:
-- [ ] STR-02 Stable IDs: incremental rebuild depends on stable chunk IDs
-- [ ] STR-03 Manifest schema: must record enough to decide “changed” deterministically
-- [ ] STR-06 Watcher strategy: pick library + fallback rules
+- [x] STR-02 Stable IDs: incremental rebuild depends on stable chunk IDs ✅
+- [x] STR-03 Manifest schema: must record enough to decide “changed” deterministically ✅
+- [x] STR-06 Watcher strategy: pick library + fallback rules ✅
 
-## Notes / blockers
-- [ ] Decide whether reconciliation sweep (periodic hash scan) is MVP or post-MVP
-- [ ] Decide how much “pending paths” detail is safe to surface in UI/MCP (future remote mode)
+## Remaining items
+- [ ] P03-I4 Polling fallback mode (low priority)
+- [ ] P03-I9 “What changed?” list for dashboard (nice to have)
+- [ ] P03-T3 Storm test automation (nice to have)

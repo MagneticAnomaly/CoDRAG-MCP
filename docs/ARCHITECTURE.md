@@ -58,14 +58,16 @@
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                          Core Engine                                        │
 ├──────────────────┬──────────────────┬──────────────────┬────────────────────┤
-│  ProjectRegistry │  IndexManager    │  TraceManager    │  LLMCoordinator    │
+│  ProjectRegistry │  CodeIndex       │  TraceIndex      │  Embedders         │
 │  (SQLite)        │  (per-project)   │  (per-project)   │  (shared)          │
 ├──────────────────┼──────────────────┼──────────────────┼────────────────────┤
-│  - projects      │  - EmbeddingIdx  │  - TraceIndex    │  - OllamaClient    │
-│  - configs       │  - DocumentStore │  - SymbolParser  │  - ClaraClient     │
-│  - build_history │  - Chunker       │  - EdgeBuilder   │  - RequestQueue    │
-│  - stats         │  - Retriever     │  - GraphQuery    │  - Cache           │
-└──────────────────┴──────────────────┴──────────────────┴────────────────────┘
+│  - projects      │  - DocumentStore │  - TraceBuilder  │  - NativeEmbedder  │
+│  - configs       │  - Chunker       │  - codrag_engine │  - OllamaEmbedder  │
+│  - build_history │  - Embeddings    │  - GraphQuery    │  - ClaraCompressor │
+│  - settings      │  - PathWeights   │  - Neighbors     │  - FeatureGate     │
+├──────────────────┴──────────────────┴──────────────────┴────────────────────┤
+│  AutoRebuildWatcher (per-project, triggers CodeIndex + TraceBuilder)        │
+└─────────────────────────────────────────────────────────────────────────────┘
                            │
                            ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -93,8 +95,12 @@
 │                          External Services                                  │
 ├──────────────────────────────┬──────────────────────────────────────────────┤
 │  Ollama (localhost:11434)    │  CLaRa (localhost:8765) [optional]           │
-│  ├── nomic-embed-text        │  ├── Context compression                     │
-│  └── mistral (augmentation)  │  └── Query-time only                         │
+│  ├── nomic-embed-text        │  ├── Context compression (PRO tier)          │
+│  └── (optional, not needed)  │  └── Query-time only                         │
+├──────────────────────────────┼──────────────────────────────────────────────┤
+│  Native ONNX (built-in)      │  License (~/.codrag/license.json)            │
+│  ├── nomic-embed-text-v1.5   │  ├── Ed25519 signed offline token            │
+│  └── No external deps needed │  └── CODRAG_TIER env override (dev)          │
 └──────────────────────────────┴──────────────────────────────────────────────┘
 ```
 

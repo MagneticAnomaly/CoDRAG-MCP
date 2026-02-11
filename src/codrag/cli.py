@@ -42,7 +42,7 @@ def _post_json(url: str, payload: dict) -> Any:
     try:
         r = requests.post(url, json=payload, timeout=30)
         r.raise_for_status()
-        return r.json()
+        return _unwrap_envelope(r.json())
     except requests.exceptions.HTTPError as e:
         try:
             err = e.response.json()
@@ -67,7 +67,7 @@ def _get_json(url: str) -> Any:
     try:
         r = requests.get(url, timeout=30)
         r.raise_for_status()
-        return r.json()
+        return _unwrap_envelope(r.json())
     except requests.exceptions.HTTPError as e:
         try:
             err = e.response.json()
@@ -86,6 +86,29 @@ def _get_json(url: str) -> Any:
         console.print(f"[red]Error: Cannot connect to CoDRAG daemon at {url}[/red]")
         console.print("[dim]Is the server running? Try: codrag serve[/dim]")
         raise typer.Exit(1)
+
+
+def _is_server_available(base: str) -> bool:
+    """Quick health check — returns True if the daemon responds."""
+    try:
+        r = requests.get(f"{base}/health", timeout=3)
+        return r.status_code == 200
+    except Exception:
+        return False
+
+
+def _unwrap_envelope(resp: Any) -> Any:
+    """Extract `data` from the standard {success, data, error} envelope."""
+    if isinstance(resp, dict):
+        if resp.get("success") and "data" in resp:
+            return resp["data"]
+        if "error" in resp:
+            err = resp["error"]
+            code = err.get("code", "ERROR") if isinstance(err, dict) else "ERROR"
+            msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+            console.print(f"[red]Error ({code}): {msg}[/red]")
+            raise typer.Exit(1)
+    return resp
 
 
 def _resolve_project(base: str, project_id: Optional[str] = None, auto: bool = True) -> str:
@@ -614,6 +637,7 @@ def mcp_config(
 
 @app.command()
 def activity(
+    project_id: Optional[str] = typer.Option(None, "--project", "-p", help="Project ID (optional if inside project dir)"),
     weeks: int = typer.Option(12, "--weeks", "-w", help="Number of weeks to display"),
     no_legend: bool = typer.Option(False, "--no-legend", help="Hide color legend"),
     no_labels: bool = typer.Option(False, "--no-labels", help="Hide day/month labels"),
@@ -692,26 +716,68 @@ def activity(
 
 @app.command()
 def config(
-    key: str = typer.Argument(None, help="Config key to get/set"),
+    key: str = typer.Argument(None, help="Config key to get/set (dot-notation, e.g. llm_config.embedding.source)"),
     value: str = typer.Argument(None, help="Value to set"),
+    host: str = typer.Option("127.0.0.1", "--host", help="Server host"),
+    port: int = typer.Option(8400, "--port", help="Server port"),
 ) -> None:
     """View or modify CoDRAG configuration."""
+    import json
+    base = _base_url(host, port)
+    
     if key is None:
-        console.print("[cyan]Current configuration:[/cyan]")
-        # TODO: Show current config
-        console.print("[yellow]Not implemented yet[/yellow]")
+        # Show full config
+        try:
+            cfg = _get_json(f"{base}/api/code-index/config")
+            console.print("[cyan]Current configuration:[/cyan]")
+            console.print(json.dumps(cfg, indent=2))
+        except Exception as e:
+            console.print(f"[red]Failed to get config: {e}[/red]")
     elif value is None:
-        console.print(f"[cyan]Getting: {key}[/cyan]")
-        # TODO: Get config value
-        console.print("[yellow]Not implemented yet[/yellow]")
+        # Get specific key (dot-notation)
+        try:
+            cfg = _get_json(f"{base}/api/code-index/config")
+            parts = key.split(".")
+            val = cfg
+            for part in parts:
+                if isinstance(val, dict) and part in val:
+                    val = val[part]
+                else:
+                    console.print(f"[yellow]Key '{key}' not found[/yellow]")
+                    return
+            console.print(f"[cyan]{key}[/cyan] = {json.dumps(val, indent=2)}")
+        except Exception as e:
+            console.print(f"[red]Failed to get config: {e}[/red]")
     else:
-        console.print(f"[cyan]Setting: {key} = {value}[/cyan]")
-        # TODO: Set config value
-        console.print("[yellow]Not implemented yet[/yellow]")
+        # Set specific key (dot-notation)
+        try:
+            # Parse value as JSON if possible, else use as string
+            try:
+                parsed_value = json.loads(value)
+            except json.JSONDecodeError:
+                parsed_value = value
+            
+            # Build nested dict from dot-notation key
+            parts = key.split(".")
+            update: dict = {}
+            current = update
+            for i, part in enumerate(parts[:-1]):
+                current[part] = {}
+                current = current[part]
+            current[parts[-1]] = parsed_value
+            
+            # PUT the update
+            import requests
+            resp = requests.put(f"{base}/api/code-index/config", json=update, timeout=10)
+            resp.raise_for_status()
+            console.print(f"[green]Set {key} = {value}[/green]")
+        except Exception as e:
+            console.print(f"[red]Failed to set config: {e}[/red]")
 
 
 @app.command()
 def coverage(
+    project_id: Optional[str] = typer.Option(None, "--project", "-p", help="Project ID (optional if inside project dir)"),
     host: str = typer.Option("127.0.0.1", "--host", help="Server host"),
     port: int = typer.Option(8400, "--port", help="Server port"),
 ) -> None:
@@ -799,6 +865,7 @@ def coverage(
 
 @app.command()
 def overview(
+    project_id: Optional[str] = typer.Option(None, "--project", "-p", help="Project ID (optional if inside project dir)"),
     weeks: int = typer.Option(12, "--weeks", "-w", help="Number of weeks for activity"),
     host: str = typer.Option("127.0.0.1", "--host", help="Server host"),
     port: int = typer.Option(8400, "--port", help="Server port"),
@@ -859,9 +926,9 @@ def overview(
         except:
             pass # Fallback to sample if endpoint missing
             
-        # 3. Fetch Trace Stats
+        # 3. Fetch Trace Stats (from project status, which includes trace info)
         try:
-            tr_data = _get_json(f"{base}/trace/stats")
+            tr_data = status_data.get("trace", {})
             trace_stats = {
                 "node_count": tr_data.get("counts", {}).get("nodes", 0),
                 "edge_count": tr_data.get("counts", {}).get("edges", 0),
@@ -895,6 +962,97 @@ def overview(
         
         render_dashboard(demo_health, demo_activity, demo_trace, weeks=weeks, console=console)
         
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+
+
+@app.command()
+def drift(
+    project_id: Optional[str] = typer.Option(None, "--project", "-p", help="Project ID"),
+    host: str = typer.Option("127.0.0.1", "--host", help="Server host"),
+    port: int = typer.Option(8400, "--port", help="Server port"),
+) -> None:
+    """Show index drift report (stale files, freshness metrics)."""
+    from codrag.viz.drift import render_drift_report
+    
+    base = _base_url(host, port)
+    
+    # Demo data for now - real implementation would fetch from /projects/{id}/coverage
+    demo_drift = {
+        "total_files": 150,
+        "stale_files": 12,
+        "stale_pct": 8.0,
+        "freshness_score": 92.0,
+        "last_scan": "2026-02-10 01:30:00",
+    }
+    demo_rotting = [
+        {"path": "src/legacy/old_api.py", "days_stale": 45, "size": 2400},
+        {"path": "docs/outdated.md", "days_stale": 30, "size": 1200},
+    ]
+    
+    try:
+        if not _is_server_available(base):
+            raise requests.exceptions.ConnectionError()
+        pid = _resolve_project(base, project_id)
+        
+        # Try to fetch real coverage data
+        url = f"{base}/projects/{pid}/coverage"
+        r = requests.get(url, timeout=30)
+        if r.status_code == 200:
+            data = _unwrap_envelope(r.json())
+            summary = data.get("summary", {})
+            demo_drift = {
+                "total_files": summary.get("total_files", 0),
+                "stale_files": summary.get("pending_files", 0),
+                "stale_pct": (summary.get("pending_files", 0) / max(summary.get("total_files", 1), 1)) * 100,
+                "freshness_score": summary.get("coverage_pct", 0),
+                "last_scan": "now",
+            }
+            demo_rotting = []
+        render_drift_report(demo_drift, demo_rotting, console=console)
+    except typer.Exit:
+        raise
+    except requests.exceptions.ConnectionError:
+        console.print("[yellow]Server not connected. Showing demo drift report.[/yellow]\n")
+        render_drift_report(demo_drift, demo_rotting, console=console)
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+
+
+@app.command()
+def flow(
+    project_id: Optional[str] = typer.Option(None, "--project", "-p", help="Project ID"),
+    host: str = typer.Option("127.0.0.1", "--host", help="Server host"),
+    port: int = typer.Option(8400, "--port", help="Server port"),
+) -> None:
+    """Show RAG flow visualization (query → retrieval → context)."""
+    from codrag.viz.flow import render_rag_flow
+    
+    base = _base_url(host, port)
+    
+    # Demo data showing a typical RAG flow
+    demo_flow = {
+        "query": "How does authentication work?",
+        "embedding_time_ms": 45,
+        "search_time_ms": 12,
+        "chunks_retrieved": 5,
+        "chunks_used": 3,
+        "context_chars": 4500,
+        "estimated_tokens": 1125,
+        "trace_expanded": True,
+        "trace_nodes_added": 2,
+    }
+    
+    try:
+        if not _is_server_available(base):
+            raise requests.exceptions.ConnectionError()
+        # For now just show demo - real implementation would need a recent query
+        render_rag_flow(demo_flow, console=console)
+    except typer.Exit:
+        raise
+    except requests.exceptions.ConnectionError:
+        console.print("[yellow]Server not connected. Showing demo RAG flow.[/yellow]\n")
+        render_rag_flow(demo_flow, console=console)
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
 

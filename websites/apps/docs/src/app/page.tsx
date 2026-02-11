@@ -44,7 +44,7 @@ const docFeatures = [
     icon: <LifeBuoy className="w-8 h-8" />,
     title: 'Support',
     description: 'Ticketing, bugs, questions, and security reporting.',
-    href: 'https://support.codrag.io',
+    href: 'https://codrag.io/support',
     external: true,
   },
 ];

@@ -15,3 +15,6 @@ export type { SelectProps, SelectOption } from './Select';
 
 export { PathInput } from './PathInput';
 export type { PathInputProps, PathPickerMode } from './PathInput';
+
+export { InfoTooltip } from './InfoTooltip';
+export type { InfoTooltipProps } from './InfoTooltip';

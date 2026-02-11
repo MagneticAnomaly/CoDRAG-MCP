@@ -147,7 +147,7 @@ Outputs:
 }
 ```
 
-#### `codrag_context`
+#### `codrag`
 
 Purpose:
 - Return an assembled prompt-ready context string (default), or a structured response when requested.
@@ -199,7 +199,7 @@ By default, MCP tools call these HTTP endpoints:
 - `codrag_status` → `GET /projects/{id}/status` + `GET /llm/status`
 - `codrag_build` → `POST /projects/{id}/build?full=false`
 - `codrag_search` → `POST /projects/{id}/search`
-- `codrag_context` → `POST /projects/{id}/context`
+- `codrag` → `POST /projects/{id}/context`
 - `codrag_trace` → `POST /projects/{id}/trace/search` and optionally `GET /projects/{id}/trace/neighbors/{node_id}`
 
 ### Limits and backpressure policy

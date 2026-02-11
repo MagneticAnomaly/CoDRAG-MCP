@@ -23,15 +23,15 @@ const paymentOptions = [
   {
     icon: <Mail className="w-8 h-8" />,
     title: 'Licensing support',
-    description: 'licenses@codrag.io',
-    href: 'mailto:licenses@codrag.io',
+    description: 'support@codrag.io',
+    href: 'mailto:support@codrag.io',
     external: true,
   },
   {
     icon: <HelpCircle className="w-8 h-8" />,
     title: 'General support',
     description: 'Bugs, questions, and troubleshooting.',
-    href: 'https://support.codrag.io',
+    href: 'https://codrag.io/support',
     external: true,
   },
 ];
