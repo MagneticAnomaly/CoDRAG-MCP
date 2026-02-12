@@ -1,41 +1,21 @@
-COMMERCIAL SOFTWARE LICENSE AGREEMENT
+MIT License
 
-Copyright (c) 2026 Magnetic Anomaly LLC. All Rights Reserved.
+Copyright (c) 2026 Magnetic Anomaly LLC
 
-This software and associated documentation files (the "Software") are the
-proprietary and confidential property of Magnetic Anomaly LLC ("Licensor").
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-LICENSE RESTRICTIONS:
-
-1. NO REDISTRIBUTION: You may not copy, modify, merge, publish, distribute,
-   sublicense, or sell copies of the Software without prior written consent
-   from Licensor.
-
-2. NO REVERSE ENGINEERING: You may not reverse engineer, decompile, or
-   disassemble the Software except as expressly permitted by applicable law.
-
-3. NO TRANSFER: You may not rent, lease, lend, sell, redistribute, or
-   sublicense the Software.
-
-4. INDIVIDUAL USE: This license is granted solely to the individual or
-   entity that purchased a valid license key from Licensor or an authorized
-   distributor.
-
-PERMITTED USE:
-
-Subject to the restrictions above and payment of applicable license fees,
-Licensor grants you a limited, non-exclusive, non-transferable license to
-install and use the Software on the number of devices and for the duration
-specified in your license key.
-
-TERMINATION:
-
-This license is effective until terminated. Your rights under this license
-will terminate automatically without notice if you fail to comply with any
-term(s) of this agreement.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED. IN NO EVENT SHALL LICENSOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY ARISING FROM THE USE OF THE SOFTWARE.
-
-For licensing inquiries: licenses@codrag.io
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

@@ -1,7 +1,0 @@
-@import '@codrag/ui/tokens/index.css';
-@import '@codrag/ui/styles/themes/index.css';
-@import 'keyboard-css/dist/css/main.min.css';
-
-@tailwind base;
-@tailwind components;
-@tailwind utilities;

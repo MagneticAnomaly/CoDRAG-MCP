@@ -1,24 +1,10 @@
 {
-  "name": "codrag",
+  "name": "codrag-mcp",
+  "version": "0.0.0",
+  "description": "The Universal Context Model for AI Coding Agents (MCP Server)",
+  "license": "MIT",
   "private": true,
-  "packageManager": "npm@10.9.3",
-  "workspaces": [
-    "packages/*",
-    "packages/vscode/webview-ui",
-    "websites/apps/*",
-    "src/codrag/dashboard"
-  ],
-  "scripts": {
-    "dev": "turbo run dev --parallel",
-    "build": "NODE_ENV=production turbo run build",
-    "lint": "turbo run lint",
-    "typecheck": "turbo run typecheck"
-  },
-  "devDependencies": {
-    "@types/react-syntax-highlighter": "^15.5.13",
-    "turbo": "^2.0.0"
-  },
-  "dependencies": {
-    "react-syntax-highlighter": "^16.1.0"
+  "bin": {
+    "codrag-mcp": "bin/codrag-mcp.js"
   }
 }

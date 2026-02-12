@@ -1,4 +1,0 @@
-{"id":"edge:contains:app.py:main","kind":"contains","source":"file:app.py","target":"sym:main@app.py","metadata":{}}
-{"id":"edge:contains:pkg/math_ops.py:add","kind":"contains","source":"file:pkg/math_ops.py","target":"sym:add@pkg/math_ops.py","metadata":{}}
-{"id":"edge:imports:app.py:pkg.math_ops","kind":"imports","source":"file:app.py","target":"file:pkg/math_ops.py","metadata":{"confidence":1.0,"import":"from pkg.math_ops import add"}}
-{"id":"edge:imports:app.py:utils","kind":"imports","source":"file:app.py","target":"file:utils.py","metadata":{"confidence":1.0,"import":"from utils import greet"}}

@@ -1,6 +1,0 @@
-{"id":"file:app.py","kind":"file","name":"app.py","file_path":"app.py","span":null,"language":"py","metadata":{}}
-{"id":"file:utils.py","kind":"file","name":"utils.py","file_path":"utils.py","span":null,"language":"py","metadata":{}}
-{"id":"file:pkg/__init__.py","kind":"file","name":"pkg/__init__.py","file_path":"pkg/__init__.py","span":null,"language":"py","metadata":{}}
-{"id":"file:pkg/math_ops.py","kind":"file","name":"pkg/math_ops.py","file_path":"pkg/math_ops.py","span":null,"language":"py","metadata":{}}
-{"id":"sym:main@app.py","kind":"symbol","name":"main","file_path":"app.py","span":{"start_line":5,"end_line":7},"language":"py","metadata":{"symbol_kind":"function"}}
-{"id":"sym:add@pkg/math_ops.py","kind":"symbol","name":"add","file_path":"pkg/math_ops.py","span":{"start_line":1,"end_line":2},"language":"py","metadata":{"symbol_kind":"function"}}

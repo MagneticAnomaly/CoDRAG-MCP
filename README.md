@@ -1,9 +1,19 @@
 <h1 align="center">CoDRAG</h1>
 <h2 align="center"><em>The bridge between how you think about code and how AI reads it.</em></h2>
 
+<div align="center">
+
+[![License](https://img.shields.io/badge/license-Commercial-blue.svg)](LICENSE)
+[![MCP](https://img.shields.io/badge/MCP-Compatible-green.svg)](https://modelcontextprotocol.io)
+[![Local First](https://img.shields.io/badge/Local-First-purple.svg)](https://codrag.io)
+
+</div>
+
 **Code Documentation and RAG** — Local-first codebase intelligence for developers and AI coding agents.
 
 AI assistants are only as good as the context they receive. Most tools send fragments — a single file, a keyword match — and the model fills in the gaps with hallucinations. CoDRAG fixes this by building a **persistent, semantic index** of your entire codebase (or multiple repos) and serving bounded, source-cited context on demand.
+
+> **Important:** CoDRAG is a **local desktop application**, not a cloud service. This repository contains the MCP server shim — a thin wrapper that connects your AI tools to the CoDRAG engine running on your machine. **You must install the full CoDRAG application first.** See [Installation](#installation) below.
 
 ### Core capabilities
 
@@ -15,59 +25,124 @@ AI assistants are only as good as the context they receive. Most tools send frag
 
 ---
 
-## CLI + MCP Quickstart
+<img src="dashboard-demo.png" width="100%" alt="CoDRAG dashboard" />
 
-CoDRAG is primarily used in two ways:
+## Why CoDRAG?
 
-- **CLI**: manage projects, build indexes, search, and assemble context.
-- **MCP tool/server**: expose CoDRAG capabilities to AI tools (Cursor, Windsurf, Claude Code, Gemini CLI, Qwen Code, Copilot) via the Model Context Protocol.
+AI tools are evolving fast. The context they need shouldn't be locked inside one specific editor.
 
-### CLI (daemon mode)
+| Developer Problem | CoDRAG Solution |
+|:---|:---|
+| **"AI hallucinations"** | AI guesses when it lacks context or gets condused with too much context. CoDRAG provides **grounded, guided, source-cited context** from targeted parts of your codebase. |
+| **"Fragmented Context"** | Each tool (Cursor, VS Code, CLI) has its own partial index. CoDRAG is a **unified context server** for *all* your tools. |
+| **"Dumb Search"** | grep/regex misses concepts. CoDRAG uses **Trace Indexing** (Who calls this? What implements this interface?) + Semantic Search. |
+| **"Privacy Risks"** | Most tools upload code to index it. CoDRAG is **100% Local-First**. Your code never leaves your machine. |
+| **"Context Window Limits"** | Pasting huge files wastes tokens. CoDRAG uses **Context Compression** (via [CLaRa](https://github.com/apple/ml-clara)) to pack 80% more meaning into the same window. |
+| **"Managing separate RAG indexes for 5+ repos is tedious"** | Single daemon manages all projects. |
+| **"Each IDE tool spins up its own Ollama connection"** | Shared LLM connection pool. |
+| **"Juggling multiple ports/processes per project"** | One port (8400), project tabs in UI. |
+| **"Finding relevant code takes 20+ minutes for new devs"** | Pre-indexed codebase with instant semantic search. |
+| **"AI assistants forget codebase context between sessions"** | Persistent trace index + structural memory. |
+
+---
+
+## Installation
+
+CoDRAG is a desktop application. Install it first, then configure your AI tools to connect via MCP.
+
+### Prerequisites
+- macOS 11+ or Windows 10+
+- 4GB free disk space
+- Ollama (optional, for embeddings — CoDRAG also ships native ONNX embeddings)
+
+### Step 1: Install the CoDRAG Application
 
 ```bash
-# 1) Start the daemon
-codrag serve
+# macOS (Homebrew)
+brew install --cask codrag
 
-# 2) Register a repo
-codrag add /path/to/your/repo
-
-# 3) Build the index (async)
-codrag build
-
-# 4) Semantic search
-codrag search "authentication middleware"
-
-# 5) Assemble LLM-ready context
-codrag context "explain the login flow" --raw
+# Windows (winget)
+winget install MagneticAnomaly.CoDRAG
 ```
 
-### MCP (IDE integration)
+Or download directly from [codrag.io/download](https://codrag.io/download).
+
+*The core engine is free for personal use (1 active project). See [codrag.io/pricing](https://codrag.io/pricing) for Pro/Team tiers.*
+
+### Step 2: Start the Daemon and Index a Project
+
+```bash
+# Start the daemon
+codrag serve
+
+# Register a repo
+codrag add /path/to/your/repo
+
+# Build the index (async)
+codrag build
+
+# Open the dashboard (optional)
+codrag ui
+```
+
+### Step 3: Connect Your AI Tool via MCP
+
+Once CoDRAG is running, connect any MCP-compatible tool:
 
 ```bash
 # Start MCP in server mode (connects to the running daemon)
 codrag mcp --auto
 
-# Generate IDE config (prints JSON)
+# Generate IDE config (prints JSON you can paste into your tool's settings)
 codrag mcp-config --ide cursor
+codrag mcp-config --ide claude
+codrag mcp-config --ide all
 ```
 
-For the full CLI reference, see `docs/CLI.md`.
-
-### GUI (Dashboard)
-
-CoDRAG also ships with a **GUI dashboard** for day-to-day workflows:
-
-- **Project visibility** (index status, staleness, trace status)
-- **Build controls** and configuration editing
-- **Search + preview** and **context assembly** (LLM-ready output)
-- A modular layout you can tailor to your workflow
-
-<img src="dashboard-demo.png" width="100%" alt="CoDRAG dashboard" />
+### With Ollama (optional)
 
 ```bash
-# Open the dashboard in your browser
-codrag ui
+# Install Ollama (if not installed)
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Pull embedding model
+ollama pull nomic-embed-text
+
+# CoDRAG will auto-detect Ollama at localhost:11434
 ```
+
+---
+
+## Verified Integrations
+
+CoDRAG works with any MCP-compatible client. We officially verify and document the following:
+
+### Tier 1: Verified
+- **[Cursor](https://cursor.sh)** — The AI code editor.
+- **[Windsurf](https://windsurf.ai)** — The agentic IDE.
+- **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** — Anthropic's terminal-native coding agent.
+- **[VS Code](https://code.visualstudio.com)** — Via the official CoDRAG extension or MCP plugin.
+- **[GitHub Copilot](https://github.com/features/copilot)** — Via MCP integration in VS Code / JetBrains.
+- **[Gemini CLI](https://github.com/google-gemini/gemini-cli)** — Google's terminal agent for Gemini models.
+- **[Qwen Code](https://github.com/QwenLM/qwen-code)** — The terminal agent for Qwen models.
+
+### Tier 2: Community
+- **[Gemini CLI Desktop](https://github.com/Piebald-AI/gemini-cli-desktop)** — GUI frontend for Gemini CLI / Qwen Code with MCP support.
+- **JetBrains** — Supported via generic MCP plugins.
+- **Zed** — Experimental support.
+
+---
+
+## The "Context MVC" Architecture
+
+We believe in a **Model-View-Controller** approach to AI development:
+
+- **The Model (CoDRAG)**: The source of truth. Manages the trace graph, file index, semantic search, and context assembly.
+- **The View (Your Tool)**: Cursor, Windsurf, Claude Code, Gemini CLI, Qwen Code, or VS Code. Handles the UI and LLM inference.
+
+CoDRAG is the universal model. Bring your own view.
+
+---
 
 ## Vision
 
@@ -78,16 +153,6 @@ CoDRAG is a **local-first, team-ready** application that provides:
 - **LLM augmentation** for intelligent summaries and context assembly
 - **Unified dashboard** with project tabs, search, and visualization
 - **MCP integration** for AI tools (Cursor, Windsurf, Claude Code, Gemini CLI, Qwen Code, VS Code, Copilot)
-
-### Why CoDRAG?
-
-| Developer Problem | CoDRAG Solution |
-|---------|-----------------|
-| "Managing separate RAG indexes for 5+ repos is tedious" | Single daemon manages all projects |
-| "Each IDE tool spins up its own Ollama connection" | Shared LLM connection pool |
-| "Juggling multiple ports/processes per project" | One port (8400), project tabs in UI |
-| "Finding relevant code takes 20+ minutes for new devs" | Pre-indexed codebase with instant semantic search |
-| "AI assistants forget codebase context between sessions" | Persistent trace index + structural memory |
 
 ---
 
@@ -127,6 +192,32 @@ CoDRAG is a **local-first, team-ready** application that provides:
        └─────────┘         └─────────┘           └─────────┘
 ```
 
+```mermaid
+graph TD
+    subgraph "The View (Client)"
+        Cursor[Cursor / Windsurf]
+        Claude[Claude Code]
+        Gemini[Gemini CLI / Qwen Code]
+        Copilot[GitHub Copilot]
+    end
+
+    subgraph "The Model (CoDRAG)"
+        MCP[MCP Server]
+        Daemon[CoDRAG Daemon]
+        Index[(Trace Index)]
+        Search[(Vector DB)]
+    end
+
+    Cursor -->|MCP| MCP
+    Claude -->|MCP| MCP
+    Gemini -->|MCP| MCP
+    Copilot -->|MCP| MCP
+
+    MCP -->|JSON-RPC| Daemon
+    Daemon --> Index
+    Daemon --> Search
+```
+
 ---
 
 ## Key Features
@@ -149,7 +240,7 @@ Beyond keyword/semantic search, CoDRAG builds a **structural graph**:
 - Queries: Find all callers of a function, trace import chains, explore class hierarchies
 
 ### LLM Integration
-- **Embeddings:** Ollama (`nomic-embed-text` recommended) for semantic search
+- **Embeddings:** Ollama (`nomic-embed-text` recommended) or native ONNX for zero-latency semantic search
 - **Compression:** CLaRa (optional) for context window optimization
 - **Augmentation:** Mistral/Llama (optional) for code summaries
 - Reuses single Ollama connection across all indexed projects
@@ -163,54 +254,9 @@ Generate [AGENTS.md](https://agents.md/) documentation from trace index:
 
 ---
 
-## Installation
-
-### Prerequisites
-- macOS 11+ or Windows 10+
-- 4GB free disk space
-- Ollama (optional, for embeddings)
-
-### Quick Start
-
-```bash
-# Download and install from codrag.io
-# Or install via package manager:
-
-# macOS (Homebrew)
-brew install --cask codrag
-
-# Windows (winget)
-winget install MagneticAnomaly.CoDRAG
-
-# Start the daemon
-codrag serve
-
-# Add a project
-codrag add /path/to/your/project --name "MyProject"
-
-# Open dashboard
-codrag ui
-```
-
-### With Ollama
-
-```bash
-# Install Ollama (if not installed)
-curl -fsSL https://ollama.com/install.sh | sh
-
-# Pull embedding model
-ollama pull nomic-embed-text
-
-# CoDRAG will auto-detect Ollama at localhost:11434
-```
-
----
-
 ## CLI Reference
 
 The CLI is implemented with Typer; run `codrag --help` or `codrag <command> --help` for detailed help.
-
-Full reference: `docs/CLI.md`.
 
 ### Common examples
 
@@ -445,86 +491,31 @@ codrag config set server.remote_url http://team-server:8400
 
 ---
 
-## Development
+## GUI (Dashboard)
 
-### Project Structure
+CoDRAG ships with a **GUI dashboard** for day-to-day workflows:
 
-```
-CoDRAG/
-├── src/
-│   └── codrag/
-│       ├── __init__.py
-│       ├── cli.py              # CLI entry point
-│       ├── server.py           # FastAPI app
-│       ├── core/
-│       │   ├── registry.py     # Project registry (SQLite)
-│       │   ├── embedding.py    # Embedding index
-│       │   ├── trace.py        # Trace index
-│       │   ├── watcher.py      # File watcher
-│       │   └── llm.py          # LLM coordinator
-│       └── api/
-│           ├── projects.py     # /projects routes
-│           ├── search.py       # /search routes
-│           ├── trace.py        # /trace routes
-│           └── llm.py          # /llm routes
-├── dashboard/
-│   ├── src/
-│   │   ├── App.tsx
-│   │   ├── components/
-│   │   └── pages/
-│   ├── package.json
-│   └── vite.config.ts
-├── docs/
-│   ├── ARCHITECTURE.md
-│   ├── ROADMAP.md
-│   └── API.md
-├── tests/
-├── pyproject.toml
-└── README.md
-```
-
-### Running in Development
+- **Project visibility** (index status, staleness, trace status)
+- **Build controls** and configuration editing
+- **Search + preview** and **context assembly** (LLM-ready output)
+- A modular layout you can tailor to your workflow
 
 ```bash
-# Terminal 1: Backend
-source .venv/bin/activate
-uvicorn codrag.server:app --reload --port 8400
-
-# Terminal 2: Dashboard
-cd dashboard
-npm run dev
-
-# Open http://localhost:5173 (Vite dev server proxies to :8400)
-```
-
-### Testing
-
-```bash
-pytest tests/
-npm run test --prefix dashboard
+# Open the dashboard in your browser
+codrag ui
 ```
 
 ---
 
-## Roadmap
+## About This Repository
 
-See [PHASES.md](docs/PHASES.md) for the authoritative phase index and [ROADMAP.md](docs/ROADMAP.md) for detailed phase writeups.
+This repository (`codrag-mcp`) contains:
 
-| Phase | Focus | Timeline |
-|-------|-------|----------|
-| **01: Foundation** | Core engine, CLI, basic API | |
-| **02: Dashboard** | UI, project management, search/context views | |
-| **03: Auto-Rebuild** | File watching, incremental builds | |
-| **04: Trace Index** | Symbol extraction, graph queries | |
-| **05: MCP Integration** | IDE tool support | |
-| **06: Team & Enterprise** | Embedded mode + enterprise guardrails | |
-| **07: Polish & Testing** | Reliability, UX, regression coverage | |
-| **08: Tauri MVP** | Native app wrapper (MVP milestone) | |
-| **09: Post-MVP** | Structured expansion proposals | |
-| **10: Business & Competitive Research** | Pricing, positioning, licensing | |
-| **11: Deployment** | Packaging, distribution, updates | |
-| **12: Marketing / Docs / Website** | Documentation + public-facing assets | |
-| **13: Storybook** | Design system + UI component library | |
+- **The MCP server shim** (`bin/codrag-mcp.js`) — a thin Node.js wrapper that spawns `codrag mcp` and bridges stdio for MCP clients.
+- **Documentation** for the CoDRAG application and its MCP integration.
+- **Issue tracker** for MCP-related bugs and feature requests.
+
+The actual CoDRAG engine, dashboard, CLI, and all indexing logic live in the main application. This package exists so that MCP clients (like Cursor or Claude Code) can reference `codrag-mcp` as a server entry point.
 
 ---
 
@@ -532,5 +523,14 @@ See [PHASES.md](docs/PHASES.md) for the authoritative phase index and [ROADMAP.m
 
 - **[Ollama](https://ollama.com/)** — Local LLM serving (CoDRAG uses for embeddings)
 - **[CLaRa](https://github.com/apple/ml-clara)** — Context compression (optional integration)
+- **[CLaRa-Remembers-It-All](https://github.com/EricBintner/CLaRa-Remembers-It-All)** — For hosting CLaRa models on a network(optional integration)
+
 ---
 
+## License
+
+The CoDRAG Desktop App and Engine are commercial software.
+This repository serves as the public documentation and MCP shim for the integration.
+
+See [LICENSE](LICENSE) for details on this repository's content (MIT).
+See [codrag.io/terms](https://codrag.io/terms) for the CoDRAG application license.
