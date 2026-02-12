@@ -1,17 +1,29 @@
+// @ts-nocheck
 import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
+// @ts-ignore - Types are missing for some languages in @types/react-syntax-highlighter
 import { 
   bash, 
   c, 
   cpp, 
+  csharp,
   css, 
+  dart,
   go, 
   java, 
   javascript, 
   json, 
+  kotlin,
+  lua,
   markdown, 
+  objectivec,
+  php,
   python, 
+  r,
+  ruby,
   rust, 
+  scala,
   sql, 
+  swift,
   typescript, 
   yaml,
   ini,
@@ -35,8 +47,18 @@ function registerLanguages() {
   SyntaxHighlighter.registerLanguage('go', go);
   SyntaxHighlighter.registerLanguage('rust', rust);
   SyntaxHighlighter.registerLanguage('java', java);
+  SyntaxHighlighter.registerLanguage('kotlin', kotlin);
   SyntaxHighlighter.registerLanguage('c', c);
   SyntaxHighlighter.registerLanguage('cpp', cpp);
+  SyntaxHighlighter.registerLanguage('csharp', csharp);
+  SyntaxHighlighter.registerLanguage('swift', swift);
+  SyntaxHighlighter.registerLanguage('objectivec', objectivec);
+  SyntaxHighlighter.registerLanguage('dart', dart);
+  SyntaxHighlighter.registerLanguage('ruby', ruby);
+  SyntaxHighlighter.registerLanguage('php', php);
+  SyntaxHighlighter.registerLanguage('scala', scala);
+  SyntaxHighlighter.registerLanguage('lua', lua);
+  SyntaxHighlighter.registerLanguage('r', r);
   SyntaxHighlighter.registerLanguage('json', json);
   SyntaxHighlighter.registerLanguage('markdown', markdown);
   SyntaxHighlighter.registerLanguage('yaml', yaml);
@@ -71,6 +93,7 @@ export function detectLanguage(path: string): string {
     case 'mjs':
       return 'javascript';
     case 'py':
+    case 'pyi':
       return 'python';
     case 'go':
       return 'go';
@@ -78,6 +101,9 @@ export function detectLanguage(path: string): string {
       return 'rust';
     case 'java':
       return 'java';
+    case 'kt':
+    case 'kts':
+      return 'kotlin';
     case 'c':
     case 'h':
       return 'c';
@@ -86,6 +112,27 @@ export function detectLanguage(path: string): string {
     case 'cc':
     case 'cxx':
       return 'cpp';
+    case 'cs':
+      return 'csharp';
+    case 'swift':
+      return 'swift';
+    case 'm':
+    case 'mm':
+      return 'objectivec';
+    case 'dart':
+      return 'dart';
+    case 'rb':
+      return 'ruby';
+    case 'php':
+      return 'php';
+    case 'scala':
+    case 'sc':
+      return 'scala';
+    case 'lua':
+      return 'lua';
+    case 'r':
+    case 'R':
+      return 'r';
     case 'json':
       return 'json';
     case 'md':
@@ -101,9 +148,12 @@ export function detectLanguage(path: string): string {
     case 'sql':
       return 'sql';
     case 'html':
+    case 'htm':
       return 'html';
     case 'css':
     case 'scss':
+    case 'sass':
+    case 'less':
       return 'css';
     case 'xml':
     case 'svg':
@@ -111,6 +161,9 @@ export function detectLanguage(path: string): string {
     case 'ini':
     case 'toml':
     case 'cfg':
+    case 'conf':
+    case 'properties':
+    case 'env':
       return 'ini';
     case 'dockerfile':
       return 'dockerfile';

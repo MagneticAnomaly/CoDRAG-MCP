@@ -96,7 +96,7 @@ const mockStaleFiles: TraceCoverageFile[] = [
   { path: 'src/core/index.py', language: 'python', size: 8900, modified: new Date(Date.now() - 3_600_000).toISOString(), created: new Date(Date.now() - 604_800_000).toISOString() },
 ];
 
-const mockIgnoredFiles: TraceCoverageFile[] = [
+const mockExcludedFiles: TraceCoverageFile[] = [
   { path: 'tests/test_api.py', language: 'python', size: 3200, modified: new Date(Date.now() - 86_400_000).toISOString(), created: new Date(Date.now() - 604_800_000).toISOString() },
   { path: 'scripts/deploy.sh', language: null, size: 800, modified: new Date(Date.now() - 86_400_000).toISOString(), created: new Date(Date.now() - 604_800_000).toISOString() },
 ];
@@ -106,7 +106,7 @@ const mockCoverageSummary: TraceCoverageSummary = {
   traced: 38,
   untraced: 3,
   stale: 1,
-  ignored: 2,
+  excluded: 2,
   coverage_pct: 90.5,
   last_build_at: new Date(Date.now() - 3_600_000).toISOString(),
 };
@@ -420,13 +420,13 @@ export const FullDashboard: StoryObj = {
           summary={mockCoverageSummary}
           untracedFiles={mockUntracedFiles}
           staleFiles={mockStaleFiles}
-          ignoredFiles={mockIgnoredFiles}
+          excludedFiles={mockExcludedFiles}
           building={false}
           loading={false}
           onTraceAll={() => console.log('[Story] Trace All')}
           onRetraceStale={() => console.log('[Story] Re-trace Stale')}
-          onAddIgnorePattern={(p) => console.log('[Story] Add ignore:', p)}
-          onRemoveIgnorePattern={(p) => console.log('[Story] Remove ignore:', p)}
+          onAddExcludePattern={(p: string) => console.log('[Story] Add exclude:', p)}
+          onRemoveExcludePattern={(p: string) => console.log('[Story] Remove exclude:', p)}
           onRefresh={() => console.log('[Story] Refresh')}
           bare
         />

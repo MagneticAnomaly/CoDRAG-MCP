@@ -14,12 +14,15 @@ import type {
   SearchResponse,
   WatchActionResponse,
 } from './types';
-import type { LLMStatus, LicenseStatus, Project, ProjectStatus, TraceCoverage, TraceStatus, WatchStatus, GlobalConfig, ModelStatusResult, ModelReadinessStatus } from '../types';
+import type { LLMStatus, LicenseStatus, Project, ProjectStatus, TraceCoverage, TraceStatus, WatchStatus, GlobalConfig, ModelStatusResult, ModelReadinessStatus, AugmentationStatus, DeepAnalysisRunStatus } from '../types';
 
 export interface FileTreeNode {
   name: string;
   type: 'file' | 'folder';
   children?: FileTreeNode[];
+  status?: 'indexed' | 'pending' | 'pending_removal' | 'ignored' | 'error';
+  chunks?: number;
+  has_children?: boolean;
 }
 
 export interface ApiClient {
@@ -96,6 +99,12 @@ export interface ApiClient {
   fetchLLMModels(provider: string, url: string, apiKey?: string): Promise<{ models: string[] }>;
   testLLMModel(provider: string, url: string, model: string, kind: string, apiKey?: string): Promise<{ success: boolean; message: string; model_status?: ModelReadinessStatus }>;
   getModelStatus(provider: string, url: string, model: string, ensureReady?: boolean, apiKey?: string): Promise<ModelStatusResult>;
+
+  // Augmentation & Deep Analysis
+  getAugmentStatus(projectId: string): Promise<AugmentationStatus>;
+  runAugmentation(projectId: string, maxItems?: number): Promise<{ started: boolean; task_id: string }>;
+  getDeepAnalysisStatus(projectId: string): Promise<DeepAnalysisRunStatus>;
+  runDeepAnalysis(projectId: string, opts?: { max_items?: number; max_tokens?: number; max_minutes?: number }): Promise<{ started: boolean; task_id: string }>;
 }
 
 export interface ApiClientConfig {
@@ -476,6 +485,30 @@ export class CodragApiClient implements ApiClient {
     }
 
     return envelope.data;
+  }
+
+  // ── Augmentation & Deep Analysis ──────────────────────────
+
+  async getAugmentStatus(projectId: string): Promise<AugmentationStatus> {
+    return this.requestEnvelope<AugmentationStatus>(`/projects/${projectId}/augment/status`);
+  }
+
+  async runAugmentation(projectId: string, maxItems?: number): Promise<{ started: boolean; task_id: string }> {
+    return this.requestEnvelope<{ started: boolean; task_id: string }>(`/projects/${projectId}/augment/run`, {
+      method: 'POST',
+      body: maxItems != null ? { max_items: maxItems } : {},
+    });
+  }
+
+  async getDeepAnalysisStatus(projectId: string): Promise<DeepAnalysisRunStatus> {
+    return this.requestEnvelope<DeepAnalysisRunStatus>(`/projects/${projectId}/deep-analysis/status`);
+  }
+
+  async runDeepAnalysis(projectId: string, opts?: { max_items?: number; max_tokens?: number; max_minutes?: number }): Promise<{ started: boolean; task_id: string }> {
+    return this.requestEnvelope<{ started: boolean; task_id: string }>(`/projects/${projectId}/deep-analysis/run`, {
+      method: 'POST',
+      body: opts ?? {},
+    });
   }
 }
 

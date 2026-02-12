@@ -87,6 +87,20 @@ export default defineConfig({
           });
         },
       },
+      '/events': {
+        target: 'http://127.0.0.1:8400',
+        changeOrigin: true,
+        secure: false,
+        // SSE: disable response buffering so events stream through immediately
+        configure: (proxy, _options) => {
+          proxy.on('proxyReq', (proxyReq, req, _res) => {
+            console.log('[Vite Proxy] SSE Request:', req.method, req.url);
+          });
+          proxy.on('error', (err, _req, _res) => {
+            console.log('[Vite Proxy] SSE Error:', err);
+          });
+        },
+      },
       '/license': {
         target: 'http://127.0.0.1:8400',
         changeOrigin: true,

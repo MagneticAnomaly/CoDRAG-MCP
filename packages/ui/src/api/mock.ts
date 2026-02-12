@@ -186,7 +186,7 @@ export class MockApiClient implements ApiClient {
       summary: { total_files: 10, traced_files: 8, untraced_files: 2, stale_files: 0, coverage_pct: 80 },
       untraced: [],
       stale: [],
-      ignored: [],
+      excluded: [],
     };
   }
 
@@ -247,6 +247,33 @@ export class MockApiClient implements ApiClient {
 
   async getModelStatus(): Promise<any> {
     return { status: 'ready', loaded: true };
+  }
+
+  async getAugmentStatus(): Promise<any> {
+    return {
+      enabled: false,
+      total_nodes: 0,
+      augmented_nodes: 0,
+      validated_nodes: 0,
+      avg_confidence: 0,
+      low_confidence_count: 0,
+    };
+  }
+
+  async runAugmentation(): Promise<any> {
+    return { started: true, task_id: 'mock_augment_1' };
+  }
+
+  async getDeepAnalysisStatus(): Promise<any> {
+    return {
+      queue_size: 0,
+      avg_confidence: 0,
+      running: false,
+    };
+  }
+
+  async runDeepAnalysis(): Promise<any> {
+    return { started: true, task_id: 'mock_deep_1' };
   }
 }
 

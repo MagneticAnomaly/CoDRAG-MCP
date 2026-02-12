@@ -288,6 +288,8 @@ class CodeIndex:
         files_code = 0
         lines_docs = 0
         lines_code = 0
+        chunks_code = 0
+        chunks_docs = 0
 
         # Count deleted files (in previous index but not in current scan)
         current_rel_paths = set()
@@ -355,6 +357,10 @@ class CodeIndex:
 
                     files_reused += 1
                     chunks_reused += len(idxs)
+                    if is_doc:
+                        chunks_docs += len(idxs)
+                    else:
+                        chunks_code += len(idxs)
                     lines_indexed += line_count
                     continue
 
@@ -388,6 +394,10 @@ class CodeIndex:
                 docs.append(doc)
                 vectors.append(emb)
                 chunks_embedded += 1
+                if is_doc:
+                    chunks_docs += 1
+                else:
+                    chunks_code += 1
                 continue
 
             # Normal processing for small files
@@ -412,6 +422,10 @@ class CodeIndex:
                 docs.append(doc)
                 vectors.append(emb)
                 chunks_embedded += 1
+                if is_doc:
+                    chunks_docs += 1
+                else:
+                    chunks_code += 1
 
         if not docs:
             raise RuntimeError("No documents indexed")
@@ -453,6 +467,8 @@ class CodeIndex:
                     chunks_total=len(docs),
                     chunks_reused=chunks_reused,
                     chunks_embedded=chunks_embedded,
+                    chunks_code=chunks_code,
+                    chunks_docs=chunks_docs,
                     lines_scanned=lines_scanned,
                     lines_indexed=lines_indexed,
                     files_docs=files_docs,
@@ -472,6 +488,17 @@ class CodeIndex:
                 built_at=datetime.now(timezone.utc).isoformat(),
             )
             write_manifest(temp_dir / "manifest.json", manifest)
+
+            # Preserve trace index files if they exist in the old directory
+            # because the atomic swap will wipe them out.
+            for trace_file in ["trace_manifest.json", "trace_nodes.jsonl", "trace_edges.jsonl"]:
+                old_path = self.index_dir / trace_file
+                if old_path.exists():
+                    try:
+                        shutil.copy2(old_path, temp_dir / trace_file)
+                        logger.info(f"Preserved existing trace file: {trace_file}")
+                    except Exception as e:
+                        logger.warning(f"Failed to preserve trace file {trace_file}: {e}")
 
             # Atomic swap
             self._swap_index_dir(temp_dir)

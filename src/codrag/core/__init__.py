@@ -55,6 +55,8 @@ from .chunking import Chunk, chunk_markdown, chunk_code
 from .compressor import ContextCompressor, ClaraCompressor, NoopCompressor, CompressResult
 from .index import CodeIndex, SearchResult
 from .trace import TraceBuilder, TraceIndex, TraceNode, TraceEdge, build_trace
+from .augmenter import TraceAugmenter, LLMClient, AugmentationEntry, AugmentResult
+from .deep_analysis import DeepAnalysisOrchestrator, DeepAnalysisSchedule, DeepAnalysisResult
 
 __all__ = [
     "ENGINE",
@@ -77,4 +79,11 @@ __all__ = [
     "TraceNode",
     "TraceEdge",
     "build_trace",
+    "TraceAugmenter",
+    "LLMClient",
+    "AugmentationEntry",
+    "AugmentResult",
+    "DeepAnalysisOrchestrator",
+    "DeepAnalysisSchedule",
+    "DeepAnalysisResult",
 ]

@@ -1,6 +1,7 @@
-import { Folder, Database, Activity, AlertCircle, FileText, Code2, AlignLeft } from 'lucide-react';
+import { Folder, Database, Activity, AlertCircle, FileText, Code2, AlignLeft, RefreshCw, Play, GitBranch, BookOpen } from 'lucide-react';
 import { Card, Flex, Badge, Title, Text, Divider } from '@tremor/react';
 import { cn } from '../../lib/utils';
+import { Button } from '../primitives/Button';
 import { ProgressIndicator } from '../status/ProgressIndicator';
 import type { TaskProgress } from '../../types';
 
@@ -11,6 +12,8 @@ export interface IndexBuildStats {
   files_embedded: number;
   files_deleted: number;
   chunks_total: number;
+  chunks_code?: number;
+  chunks_docs?: number;
   lines_scanned?: number;
   lines_indexed?: number;
   files_docs?: number;
@@ -32,8 +35,11 @@ export interface IndexStats {
 export interface IndexStatusCardProps {
   stats: IndexStats;
   building?: boolean;
+  stale?: boolean;
   progress?: TaskProgress;
   lastError?: string | null;
+  onBuild?: () => void;
+  traceChunks?: number;
   className?: string;
   bare?: boolean;
 }
@@ -50,8 +56,11 @@ function formatNumber(num: number): string {
 export function IndexStatusCard({
   stats,
   building = false,
+  stale = false,
   progress,
   lastError,
+  onBuild,
+  traceChunks = 0,
   className,
   bare = false,
 }: IndexStatusCardProps) {
@@ -102,12 +111,35 @@ export function IndexStatusCard({
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0 mt-1">
-          {stats.loaded ? (
-            <Badge color="green">Fresh</Badge>
-          ) : (
-             <Badge color="yellow">Stale</Badge>
+          {onBuild && (
+            <Button
+              variant={stale ? "default" : "outline"}
+              size="sm"
+              onClick={onBuild}
+              disabled={building || !stats.index_dir}
+              className={cn(
+                "h-6 px-2 text-xs gap-1.5",
+                stale && "bg-amber-500/10 text-amber-500 border-amber-500/20 hover:bg-amber-500/20 hover:border-amber-500/30"
+              )}
+            >
+              {building ? (
+                <RefreshCw className="w-3 h-3 animate-spin" />
+              ) : (
+                <Play className="w-3 h-3" />
+              )}
+              {building ? 'Building' : stale ? 'Rebuild' : 'Rebuild'}
+            </Button>
           )}
-          {building && <Badge color="blue">Building</Badge>}
+
+          {building ? (
+            <Badge color="blue">Building</Badge>
+          ) : stats.loaded && !stale ? (
+            <Badge color="green">Fresh</Badge>
+          ) : stats.loaded && stale ? (
+            <Badge color="yellow">Stale</Badge>
+          ) : (
+            <Badge color="gray">Not Built</Badge>
+          )}
         </div>
       </div>
       
@@ -120,11 +152,26 @@ export function IndexStatusCard({
       <Divider className="my-4" />
       
       <div className="space-y-4">
-        {/* Primary Stats Row */}
-        <Flex className="gap-6 flex-wrap">
-          <div className="flex items-center gap-2 text-sm text-text-muted" title="Total chunks indexed">
-            <Database className="w-4 h-4 text-primary" />
-            <span className="font-medium text-text">{formatNumber(stats.total_documents ?? 0)}</span> chunks
+        {/* Chunk Breakdown Row */}
+        <Flex className="gap-5 flex-wrap">
+          <div className="flex items-center gap-1.5 text-sm text-text-muted" title="Code chunks (source files)">
+            <Code2 className="w-3.5 h-3.5 text-blue-400" />
+            <span className="font-medium text-text">{formatNumber(stats.build?.chunks_code ?? stats.total_documents ?? 0)}</span>
+            <span className="text-xs">Code</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-sm text-text-muted" title="Instructions chunks (.md, docs, plans, research)">
+            <BookOpen className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="font-medium text-text">{formatNumber(stats.build?.chunks_docs ?? 0)}</span>
+            <span className="text-xs">Instructions</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-sm text-text-muted" title="Trace chunks (cross-reference graph embeddings)">
+            <GitBranch className="w-3.5 h-3.5 text-purple-400" />
+            <span className="font-medium text-text">{formatNumber(traceChunks)}</span>
+            <span className="text-xs">Trace</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs text-text-subtle" title="Total chunks">
+            <Database className="w-3 h-3" />
+            {formatNumber(stats.total_documents ?? 0)} total
           </div>
           
           {(stats.build?.lines_indexed !== undefined) && (

@@ -81,9 +81,14 @@ async def startup_event():
     loop = asyncio.get_running_loop()
     bus.set_loop(loop)
     
-    # Attach log handler to capture root logs
+    # Attach log handler to capture root logs and broadcast via SSE.
+    # Root logger defaults to WARNING — lower it so INFO messages
+    # (build progress, model readiness, etc.) reach the handler.
     root_logger = logging.getLogger()
+    if root_logger.level > logging.INFO:
+        root_logger.setLevel(logging.INFO)
     handler = BroadcastLogHandler(bus)
+    handler.setLevel(logging.INFO)  # Don't broadcast DEBUG noise
     formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     handler.setFormatter(formatter)
     root_logger.addHandler(handler)
@@ -98,28 +103,57 @@ async def startup_event():
 async def events_endpoint(request: Request):
     """
     Server-Sent Events (SSE) endpoint for real-time logs and progress.
+    Uses stdlib queue.Queue (thread-safe) polled via asyncio.sleep.
     """
+    import queue as _queue
+    import asyncio as _asyncio
+    import time as _time
+
     bus = get_event_bus()
-    queue = await bus.subscribe()
-    
+    q = bus.subscribe()
+
     async def event_generator():
         try:
+            # Send an initial comment so the client sees an open stream
+            yield ": connected\n\n"
+
+            heartbeat_interval = 15  # seconds between heartbeats
+            last_heartbeat = _time.time()
+
             while True:
-                # Check for client disconnect
-                if await request.is_disconnected():
-                    break
-                    
-                # Wait for next event
-                payload = await queue.get()
-                
-                # Format as SSE
-                yield f"data: {json.dumps(payload)}\n\n"
-        except asyncio.CancelledError:
+                # Drain all available events (non-blocking)
+                had_events = False
+                try:
+                    while True:
+                        payload = q.get_nowait()
+                        yield f"data: {json.dumps(payload)}\n\n"
+                        had_events = True
+                except _queue.Empty:
+                    pass
+
+                if not had_events:
+                    # Send heartbeat comment to keep connection alive
+                    now = _time.time()
+                    if now - last_heartbeat >= heartbeat_interval:
+                        yield ": heartbeat\n\n"
+                        last_heartbeat = now
+                    await _asyncio.sleep(0.2)
+        except _asyncio.CancelledError:
+            pass
+        except GeneratorExit:
             pass
         finally:
-            await bus.unsubscribe(queue)
-    
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+            bus.unsubscribe(q)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.exception_handler(FeatureGateError)
@@ -181,7 +215,40 @@ _DEFAULT_UI_CONFIG: Dict[str, Any] = {
     "repo_root": "",
     "core_roots": [],
     "working_roots": [],
-    "include_globs": ["**/*.md", "**/*.py", "**/*.ts", "**/*.tsx", "**/*.js", "**/*.json", "**/*.swift", "**/*.jsx", "**/*.css", "**/*.scss", "**/*.html", "**/*.yaml", "**/*.yml", "**/*.toml", "**/*.cfg", "**/*.ini", "**/*.sh", "**/*.rs", "**/*.go", "**/*.java", "**/*.c", "**/*.cpp", "**/*.h", "**/*.hpp", "**/*.txt", "**/*.xml", "**/*.sql", "**/*.rb", "**/*.php", "**/*.kt", "**/*.scala", "**/*.r", "**/*.R", "**/*.m", "**/*.mm"],
+    "include_globs": [
+        # Documentation & Data
+        "**/*.md", "**/*.txt", "**/*.json", "**/*.yaml", "**/*.yml", "**/*.toml", "**/*.xml", "**/*.csv", "**/*.tsv",
+        "**/*.sql", "**/*.graphql", "**/*.gql", "**/*.proto",
+        
+        # Web
+        "**/*.html", "**/*.css", "**/*.scss", "**/*.less", "**/*.sass",
+        "**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx", "**/*.mjs", "**/*.cjs", "**/*.vue", "**/*.svelte", "**/*.astro",
+        
+        # Systems & Low Level
+        "**/*.c", "**/*.h", "**/*.cpp", "**/*.hpp", "**/*.cc", "**/*.cxx", "**/*.hh", "**/*.hxx", "**/*.m", "**/*.mm",
+        "**/*.rs", "**/*.go", "**/*.swift", "**/*.java", "**/*.kt", "**/*.kts", "**/*.scala", "**/*.sc",
+        
+        # Scripting & Backend
+        "**/*.py", "**/*.pyi", "**/*.rb", "**/*.php", "**/*.pl", "**/*.pm", "**/*.lua", "**/*.tcl",
+        "**/*.sh", "**/*.bash", "**/*.zsh", "**/*.fish", "**/*.ps1", "**/*.bat", "**/*.cmd",
+        
+        # .NET
+        "**/*.cs", "**/*.fs", "**/*.vb", "**/*.cshtml", "**/*.aspx",
+        
+        # Functional
+        "**/*.hs", "**/*.lhs", "**/*.ex", "**/*.exs", "**/*.erl", "**/*.hrl", "**/*.clj", "**/*.cljs", "**/*.cljc", "**/*.edn", "**/*.lisp", "**/*.lsp", "**/*.scm", "**/*.ss", "**/*.rkt", "**/*.ml", "**/*.mli", "**/*.elm",
+        
+        # Mobile
+        "**/*.dart",
+        
+        # Data Science
+        "**/*.r", "**/*.R", "**/*.jl", "**/*.ipynb",
+        
+        # Config & DevOps
+        "**/*.cfg", "**/*.ini", "**/*.conf", "**/*.properties", "**/*.env", "**/*.env.*",
+        "**/Dockerfile", "**/*.dockerfile", "**/Makefile", "**/*.mk", "**/CMakeLists.txt", "**/*.cmake",
+        "**/*.gradle", "**/*.tf", "**/*.tfvars", "**/*.hcl", "**/*.sol"
+    ],
     "exclude_globs": [
         "**/.git/**",
         "**/.venv/**",
@@ -198,6 +265,17 @@ _DEFAULT_UI_CONFIG: Dict[str, Any] = {
     "trace": {"enabled": False},
     "auto_rebuild": {"enabled": False, "debounce_ms": 5000},
     "llm_config": None,  # Will be populated with defaults if missing
+    "deep_analysis": {
+        "mode": "manual",
+        "threshold_percent": 20,
+        "frequency": "weekly",
+        "day_of_week": 0,
+        "hour": 2,
+        "budget_max_tokens": 50000,
+        "budget_max_minutes": 30,
+        "budget_max_items": 100,
+        "priority": "lowest_confidence",
+    },
 }
 
 
@@ -298,6 +376,12 @@ def _load_ui_config() -> Dict[str, Any]:
             if "llm_config" not in cfg or not isinstance(cfg["llm_config"], dict):
                 cfg["llm_config"] = {}
             _deep_merge(cfg["llm_config"], data["llm_config"])
+
+        # Deep merge for deep_analysis schedule config
+        if "deep_analysis" in data and isinstance(data["deep_analysis"], dict):
+            if "deep_analysis" not in cfg or not isinstance(cfg["deep_analysis"], dict):
+                cfg["deep_analysis"] = {}
+            _deep_merge(cfg["deep_analysis"], data["deep_analysis"])
             
     return cfg
 
@@ -390,6 +474,7 @@ def _project_index_status(idx: CodeIndex, last_build_error: Optional[str] = None
         "embedding_dim": int(st.get("embedding_dim") or 0) if st.get("embedding_dim") is not None else None,
         "embedding_model": st.get("model"),
         "last_build_at": st.get("built_at"),
+        "build": st.get("build"),
         "last_error": last_error,
     }
 
@@ -626,8 +711,11 @@ def _start_trace_build(repo_root: str, include_globs: Optional[List[str]] = None
 
         def progress_callback(msg: str, current: int, total: int):
             pm.update(task_id, msg, current, total)
+            logger.info(f"[Trace] {msg} ({current}/{total})")
 
         try:
+            idx_dir = project_index_dir(project)
+            logger.info(f"Building trace index for {project.id} in {idx_dir}")
             builder = TraceBuilder(
                 repo_root=Path(repo_root),
                 index_dir=index_dir,
@@ -1036,8 +1124,18 @@ def _project_build_worker(
     hard_limit_bytes: int,
     use_gitignore: bool,
 ):
+    pm = get_progress_manager()
+    task_id = pm.start_task("index_build", project.id)
     try:
         idx = _get_project_index(project)
+
+        def _progress_cb(file_path: str, current: int, total: int):
+            msg = f"Indexing {file_path}"
+            pm.update(task_id, msg, current, total)
+            # Log every 10th file at INFO level to keep console alive but not flooded
+            # or log all if user requested. Let's log all for now as user wants visibility.
+            logger.info(msg)
+
         meta = idx.build(
             repo_root=Path(project.path),
             roots=roots,
@@ -1046,12 +1144,19 @@ def _project_build_worker(
             max_file_bytes=max_file_bytes,
             hard_limit_bytes=hard_limit_bytes,
             use_gitignore=use_gitignore,
+            progress_callback=_progress_cb,
         )
         _project_last_build_result[project.id] = meta
         _project_last_build_error.pop(project.id, None)
+        
+        # Invalidate index cache so next read loads the new data
+        _project_indexes.pop(project.id, None)
+        
+        pm.finish_task(task_id, success=True, message="Build complete")
     except Exception as e:
         logger.exception("Build failed")
         _project_last_build_error[project.id] = str(e)
+        pm.finish_task(task_id, success=False, message=str(e))
     finally:
         with _project_build_lock:
             cur = threading.current_thread()
@@ -1103,8 +1208,21 @@ def _project_trace_build_worker(
     hard_limit_bytes: int,
     use_gitignore: bool,
 ):
+    pm = get_progress_manager()
+    task_id = pm.start_task("trace_build", project.id)
+
+    def progress_callback(msg: str, current: int, total: int):
+        pm.update(task_id, msg, current, total)
+        # Log periodically or for major steps to avoid flooding
+        if msg.startswith("trace_scan") and total > 0 and current % 50 == 0:
+             logger.info(f"[Trace] Scanning... ({current}/{total})")
+        elif msg == "trace_write":
+             logger.info(f"[Trace] Writing index ({current}/{total})")
+
     try:
         idx_dir = project_index_dir(project)
+        logger.info(f"Building trace index for {project.id} in {idx_dir}")
+        
         builder = TraceBuilder(
             repo_root=Path(project.path),
             index_dir=idx_dir,
@@ -1114,13 +1232,17 @@ def _project_trace_build_worker(
             hard_limit_bytes=hard_limit_bytes,
             use_gitignore=use_gitignore,
         )
-        builder.build()
+        builder.build(progress_callback=progress_callback)
 
         trace_idx = TraceIndex(idx_dir)
         trace_idx.load()
         _project_trace_indexes[project.id] = trace_idx
+        
+        logger.info("Trace build completed successfully")
+        pm.finish_task(task_id, success=True, message="Trace build completed")
     except Exception as e:
         logger.error(f"Trace build failed: {e}")
+        pm.finish_task(task_id, success=False, message=str(e))
     finally:
         with _project_trace_build_lock:
             cur = threading.current_thread()
@@ -1897,7 +2019,33 @@ def list_project_files(
               ".tox", ".eggs", "*.egg-info", ".DS_Store"}
     depth = min(max(depth, 1), 10)
 
-    def _scan(directory: Path, current_depth: int) -> List[Dict[str, Any]]:
+    # Build per-file chunk count from index documents for status annotation
+    idx = _get_project_index(proj)
+    chunks_by_file: Dict[str, int] = {}
+    if idx.is_loaded() and idx._documents:
+        for doc in idx._documents:
+            sp = str(doc.get("source_path") or "")
+            if sp:
+                chunks_by_file[sp] = chunks_by_file.get(sp, 0) + 1
+
+    def _is_ignored(name: str) -> bool:
+        if name in ignore or (name.startswith(".") and name != ".env"):
+            return True
+        if any(name.endswith(suf) for suf in (".egg-info", ".pyc", ".pyo")):
+            return True
+        return False
+
+    def _has_visible_children(directory: Path) -> bool:
+        """Check if a directory has any non-ignored children."""
+        try:
+            for item in directory.iterdir():
+                if not _is_ignored(item.name):
+                    return True
+        except PermissionError:
+            pass
+        return False
+
+    def _scan(directory: Path, current_depth: int, rel_prefix: str) -> List[Dict[str, Any]]:
         entries: List[Dict[str, Any]] = []
         try:
             items = sorted(directory.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))
@@ -1906,26 +2054,44 @@ def list_project_files(
 
         for item in items:
             name = item.name
-            if name in ignore or (name.startswith(".") and name != ".env"):
+            if _is_ignored(name):
                 continue
-            if any(name.endswith(suf) for suf in (".egg-info", ".pyc", ".pyo")):
-                continue
+
+            child_rel = f"{rel_prefix}/{name}" if rel_prefix else name
 
             if item.is_dir():
-                children = _scan(item, current_depth + 1) if current_depth < depth else []
-                entries.append({
-                    "name": name,
-                    "type": "folder",
-                    "children": children,
-                })
+                if current_depth < depth:
+                    children = _scan(item, current_depth + 1, child_rel)
+                    entries.append({
+                        "name": name,
+                        "type": "folder",
+                        "children": children,
+                    })
+                else:
+                    # Depth limit reached — signal whether folder has children
+                    entry: Dict[str, Any] = {
+                        "name": name,
+                        "type": "folder",
+                        "children": [],
+                    }
+                    if _has_visible_children(item):
+                        entry["has_children"] = True
+                    entries.append(entry)
             elif item.is_file():
-                entries.append({
+                file_entry: Dict[str, Any] = {
                     "name": name,
                     "type": "file",
-                })
+                }
+                chunk_count = chunks_by_file.get(child_rel)
+                if chunk_count is not None:
+                    file_entry["status"] = "indexed"
+                    file_entry["chunks"] = chunk_count
+                entries.append(file_entry)
         return entries
 
-    tree = _scan(target, 1)
+    # Build the relative prefix for the scan root
+    rel_prefix = path  # empty string for project root, else the subpath
+    tree = _scan(target, 1, rel_prefix)
     return ok({"path": path, "tree": tree})
 
 
@@ -2238,15 +2404,9 @@ def trace_coverage_project(project_id: str) -> Dict[str, Any]:
     include_globs = list(include_raw) if isinstance(include_raw, list) else None
     exclude_globs = list(exclude_raw) if isinstance(exclude_raw, list) else None
 
-    # Merge trace-specific ignore patterns from project config
+    # User-configured trace ignore patterns (shown in the "Excluded" list)
     trace_ignore = (trace_cfg or {}).get("ignore_patterns", [])
-    if isinstance(trace_ignore, list) and trace_ignore:
-        if exclude_globs is None:
-            exclude_globs = [
-                "**/node_modules/**", "**/.git/**", "**/venv/**",
-                "**/__pycache__/**", "**/dist/**", "**/build/**",
-            ]
-        exclude_globs = list(exclude_globs) + [str(p) for p in trace_ignore]
+    user_exclude_globs = [str(p) for p in trace_ignore] if isinstance(trace_ignore, list) else []
 
     max_file_bytes = int((cfg.get("max_file_bytes") or 500_000) if isinstance(cfg, dict) else 500_000)
     idx_dir = project_index_dir(proj)
@@ -2256,6 +2416,7 @@ def trace_coverage_project(project_id: str) -> Dict[str, Any]:
         index_dir=idx_dir,
         include_globs=include_globs,
         exclude_globs=exclude_globs,
+        user_exclude_globs=user_exclude_globs,
         max_file_bytes=max_file_bytes,
     )
     coverage["building"] = _is_project_trace_building(proj.id)
@@ -2482,6 +2643,201 @@ def get_trace_node_neighbors(
         nodes_out.append(n)
 
     return ok({"nodes": nodes_out, "edges": edges})
+
+
+# =============================================================================
+# LLM Augmentation & Deep Analysis Endpoints
+# =============================================================================
+
+class AugmentRequest(BaseModel):
+    max_items: Optional[int] = None
+
+
+class DeepAnalysisRequest(BaseModel):
+    max_items: Optional[int] = None
+    max_tokens: Optional[int] = None
+    max_minutes: Optional[int] = None
+
+
+def _get_llm_client_for_slot(slot: str) -> Optional["LLMClient"]:
+    """Create an LLMClient from the configured model slot."""
+    from codrag.core import LLMClient
+    ui_cfg = _load_ui_config()
+    llm_cfg = ui_cfg.get("llm_config") or {}
+    slot_cfg = llm_cfg.get(f"{slot}_model") or {}
+    if not slot_cfg.get("endpoint_id") or not slot_cfg.get("model"):
+        return None
+    ep_id = slot_cfg["endpoint_id"]
+    endpoints = llm_cfg.get("saved_endpoints") or []
+    ep = next((e for e in endpoints if e.get("id") == ep_id), None)
+    if not ep:
+        return None
+    return LLMClient(endpoint_url=ep["url"], model=slot_cfg["model"])
+
+
+@app.get("/projects/{project_id}/augment/status")
+def augment_status_project(project_id: str) -> Dict[str, Any]:
+    """Get augmentation status for a project."""
+    proj = _require_project(project_id)
+    idx_dir = project_index_dir(proj)
+    from codrag.core import TraceAugmenter, LLMClient
+    # Create a dummy client just to read status
+    augmenter = TraceAugmenter(
+        index_dir=idx_dir,
+        repo_root=proj.path,
+        llm_client=LLMClient("http://localhost:11434", "none"),
+    )
+    return ok(augmenter.status())
+
+
+@app.post("/projects/{project_id}/augment/run")
+def augment_run_project(project_id: str, req: AugmentRequest) -> Dict[str, Any]:
+    """Run LLM augmentation on trace nodes (Phase 1, Step 2)."""
+    proj = _require_project(project_id)
+
+    llm_client = _get_llm_client_for_slot("small")
+    if not llm_client:
+        raise ApiException(
+            status_code=409,
+            code="NO_SMALL_MODEL",
+            message="No small model configured",
+            hint="Configure a Small Model in AI Models settings.",
+        )
+
+    if not llm_client.is_available():
+        raise ApiException(
+            status_code=503,
+            code="MODEL_UNAVAILABLE",
+            message=f"Small model endpoint not reachable: {llm_client.endpoint_url}",
+        )
+
+    idx_dir = project_index_dir(proj)
+    from codrag.core import TraceAugmenter
+
+    augmenter = TraceAugmenter(
+        index_dir=idx_dir,
+        repo_root=proj.path,
+        llm_client=llm_client,
+    )
+
+    bus = get_event_bus()
+    pm = get_progress_manager()
+    task_id = f"augment_{project_id}"
+
+    def progress_cb(phase: str, current: int, total: int):
+        pm.update(task_id, f"Augmenting: {phase}", current, total)
+
+    pm.update(task_id, "Starting augmentation...", 0, 1)
+
+    def _run():
+        try:
+            result = augmenter.run(
+                progress_callback=progress_cb,
+                max_items=req.max_items,
+            )
+            pm.update(task_id, f"Augmentation complete: {result.augmented} nodes", 1, 1, status="completed")
+            bus.emit("task", {"task_id": task_id, "status": "completed"})
+        except Exception as e:
+            logger.error("Augmentation failed: %s", e)
+            pm.update(task_id, f"Augmentation failed: {e}", 0, 1, status="failed")
+            bus.emit("task", {"task_id": task_id, "status": "failed"})
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    return ok({"started": True, "task_id": task_id})
+
+
+@app.get("/projects/{project_id}/deep-analysis/status")
+def deep_analysis_status_project(project_id: str) -> Dict[str, Any]:
+    """Get deep analysis status for a project."""
+    proj = _require_project(project_id)
+    idx_dir = project_index_dir(proj)
+
+    ui_cfg = _load_ui_config()
+    schedule_cfg = ui_cfg.get("deep_analysis") or {}
+
+    from codrag.core import DeepAnalysisOrchestrator, DeepAnalysisSchedule
+    schedule = DeepAnalysisSchedule.from_dict(schedule_cfg)
+    orchestrator = DeepAnalysisOrchestrator(
+        index_dir=idx_dir,
+        repo_root=proj.path,
+        schedule=schedule,
+    )
+    return ok(orchestrator.status())
+
+
+@app.post("/projects/{project_id}/deep-analysis/run")
+def deep_analysis_run_project(project_id: str, req: DeepAnalysisRequest) -> Dict[str, Any]:
+    """Run deep analysis validation (Phase 2, Step 4). Uses Tier 0 evidence only."""
+    proj = _require_project(project_id)
+
+    llm_client = _get_llm_client_for_slot("large")
+    if not llm_client:
+        raise ApiException(
+            status_code=409,
+            code="NO_LARGE_MODEL",
+            message="No large model configured",
+            hint="Configure a Large Model in AI Models settings.",
+        )
+
+    if not llm_client.is_available():
+        raise ApiException(
+            status_code=503,
+            code="MODEL_UNAVAILABLE",
+            message=f"Large model endpoint not reachable: {llm_client.endpoint_url}",
+        )
+
+    idx_dir = project_index_dir(proj)
+    ui_cfg = _load_ui_config()
+    schedule_cfg = ui_cfg.get("deep_analysis") or {}
+
+    from codrag.core import DeepAnalysisOrchestrator, DeepAnalysisSchedule
+    schedule = DeepAnalysisSchedule.from_dict(schedule_cfg)
+
+    # Apply request overrides
+    if req.max_items is not None:
+        schedule.budget_max_items = req.max_items
+    if req.max_tokens is not None:
+        schedule.budget_max_tokens = req.max_tokens
+    if req.max_minutes is not None:
+        schedule.budget_max_minutes = req.max_minutes
+
+    orchestrator = DeepAnalysisOrchestrator(
+        index_dir=idx_dir,
+        repo_root=proj.path,
+        schedule=schedule,
+    )
+
+    bus = get_event_bus()
+    pm = get_progress_manager()
+    task_id = f"deep_analysis_{project_id}"
+
+    def progress_cb(phase: str, current: int, total: int):
+        pm.update(task_id, f"Deep analysis: {phase}", current, total)
+
+    pm.update(task_id, "Starting deep analysis (Tier 0 evidence)...", 0, 1)
+
+    def _run():
+        try:
+            result = orchestrator.run(
+                llm_client=llm_client,
+                progress_callback=progress_cb,
+            )
+            msg = (
+                f"Deep analysis complete: {result.items_validated} validated "
+                f"({result.items_confirmed} confirmed, {result.items_corrected} corrected, "
+                f"{result.items_rejected} rejected)"
+            )
+            pm.update(task_id, msg, 1, 1, status="completed")
+            bus.emit("task", {"task_id": task_id, "status": "completed"})
+        except Exception as e:
+            logger.error("Deep analysis failed: %s", e)
+            pm.update(task_id, f"Deep analysis failed: {e}", 0, 1, status="failed")
+            bus.emit("task", {"task_id": task_id, "status": "failed"})
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    return ok({"started": True, "task_id": task_id})
 
 
 @app.get("/llm/status")

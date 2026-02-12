@@ -2,12 +2,16 @@
 Event Bus and Progress Tracking for CoDRAG.
 
 Handles real-time broadcasting of logs and task progress to the frontend via SSE.
+Uses stdlib ``queue.Queue`` (thread-safe) so that background build threads
+can emit events that are reliably picked up by the async SSE generator.
 """
 import asyncio
 import logging
 import json
+import queue as _queue
 import uuid
 import time
+import threading
 from typing import Dict, Any, List, Optional, Set
 from dataclasses import dataclass, asdict
 
@@ -32,75 +36,59 @@ class ProgressEvent:
 class EventBus:
     """
     Central hub for broadcasting events to connected clients.
+
+    Each SSE subscriber gets a ``queue.Queue`` (stdlib, thread-safe).
+    ``emit()`` pushes to every subscriber queue from any thread.
+    The async SSE generator polls with ``asyncio.sleep`` so it doesn't
+    block the event loop.
     """
     def __init__(self):
-        self._queues: Set[asyncio.Queue] = set()
-        self._history: List[Dict[str, Any]] = [] # Keep a small history for new clients? Maybe later.
-        self._lock = asyncio.Lock()
-        self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._queues: List[_queue.Queue] = []
+        self._lock = threading.Lock()
 
     def set_loop(self, loop: asyncio.AbstractEventLoop) -> None:
-        """Set the event loop to use for thread-safe dispatch."""
-        self._loop = loop
+        """Kept for API compat — no longer needed."""
+        pass
 
-    async def subscribe(self) -> asyncio.Queue:
-        """Subscribe to the event stream."""
-        queue = asyncio.Queue()
-        async with self._lock:
-            self._queues.add(queue)
-        return queue
+    def subscribe(self) -> _queue.Queue:
+        """Add a new subscriber queue (thread-safe stdlib queue)."""
+        q: _queue.Queue = _queue.Queue(maxsize=2000)
+        with self._lock:
+            self._queues.append(q)
+        return q
 
-    async def unsubscribe(self, queue: asyncio.Queue) -> None:
-        """Unsubscribe from the event stream."""
-        async with self._lock:
-            if queue in self._queues:
-                self._queues.remove(queue)
+    def unsubscribe(self, q: _queue.Queue) -> None:
+        """Remove a subscriber queue."""
+        with self._lock:
+            try:
+                self._queues.remove(q)
+            except ValueError:
+                pass
 
     def emit(self, event_type: str, data: Dict[str, Any]) -> None:
         """
-        Emit an event to all subscribers.
-        Thread-safe: schedules queue.put_nowait on the event loop.
+        Emit an event to all subscribers.  Thread-safe — can be called
+        from any thread (build workers, logging handlers, main thread).
         """
         payload = {
             "type": event_type,
             "timestamp": time.time(),
             "data": data
         }
-        
-        # We need to dispatch to the loop where the queue was created.
-        # Since queues are created in subscribe() which is async, they belong to the running loop.
-        # However, we might have multiple loops if running crazy tests, but in Uvicorn it's one.
-        # We'll assume queues are on the loop they were created on.
-        # Actually, asyncio.Queue isn't bound to a loop in recent Python versions, but .put_nowait isn't thread safe.
-        
-        # We need to copy the set to avoid modification during iteration
-        # Note: self._queues access itself isn't strictly thread-safe without lock if subscribe is called concurrently.
-        # But emit is called from threads. subscribe from async loop.
-        # We should probably lock _queues access if we want to be 100% correct, 
-        # but iterating a set is mostly atomic in CPython (though not guaranteed safe against modification).
-        # Let's try to be safe.
-        
-        # Since we can't use async with self._lock from a sync method (emit), we can't lock easily.
-        # We will optimistically iterate. 
-        
-        current_queues = list(self._queues)
-        
-        for queue in current_queues:
-            # We assume the main loop is available via get_running_loop() if we are in main thread,
-            # or we need to find the loop. 
-            # In a production server, there is usually one main loop.
+
+        with self._lock:
+            targets = list(self._queues)
+
+        for q in targets:
             try:
-                loop = asyncio.get_event_loop_policy().get_event_loop()
-                if loop.is_running():
-                     loop.call_soon_threadsafe(queue.put_nowait, payload)
-                else:
-                    # Fallback for testing or weird states
-                    pass 
-            except Exception:
-                # If we can't get the loop (e.g. we are in a thread with no loop set),
-                # we assume the queue belongs to the main thread's loop?
-                # We really should capture the loop in subscribe.
-                pass
+                q.put_nowait(payload)
+            except _queue.Full:
+                # Slow consumer — drop oldest and retry
+                try:
+                    q.get_nowait()
+                    q.put_nowait(payload)
+                except Exception:
+                    pass
 
     def emit_log(self, record: logging.LogRecord) -> None:
         """Emit a log record."""

@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { ChevronRight, ChevronDown, Folder, FolderOpen, File, FileText } from 'lucide-react';
+import { ChevronRight, ChevronDown, Folder, FolderOpen, File, FileText, Loader2, Eye } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Button } from '../primitives/Button';
 
@@ -12,6 +12,7 @@ export interface TreeNode {
   children?: TreeNode[];
   chunks?: number;
   selected?: boolean;
+  has_children?: boolean;
 }
 
 const statusColors: Record<FileStatus, string> = {
@@ -127,6 +128,8 @@ export interface FolderTreeProps {
   pathWeights?: Record<string, number>;
   /** Called when user changes weight. null removes the override (inherits parent weight). */
   onWeightChange?: (path: string, weight: number | null) => void;
+  /** Called when a depth-truncated folder is expanded — returns children to merge into the tree */
+  onLoadChildren?: (path: string) => Promise<TreeNode[]>;
   className?: string;
 }
 
@@ -141,6 +144,10 @@ interface TreeItemProps {
   onWeightChange?: (path: string, weight: number | null) => void;
   expandedPaths: Set<string>;
   onToggleExpand: (path: string) => void;
+  onLoadChildren?: (path: string) => Promise<TreeNode[]>;
+  loadingPaths: Set<string>;
+  onSetLoading: (path: string, loading: boolean) => void;
+  onMergeChildren: (path: string, children: TreeNode[]) => void;
 }
 
 function WeightEditor({
@@ -274,11 +281,13 @@ function WeightEditor({
   );
 }
 
-function TreeItem({ node, depth = 0, path = '', includedPaths, onToggleInclude, onNodeClick, pathWeights, onWeightChange, expandedPaths, onToggleExpand }: TreeItemProps) {
+function TreeItem({ node, depth = 0, path = '', includedPaths, onToggleInclude, onNodeClick, pathWeights, onWeightChange, expandedPaths, onToggleExpand, onLoadChildren, loadingPaths, onSetLoading, onMergeChildren }: TreeItemProps) {
   const currentPath = path ? `${path}/${node.name}` : node.name;
   const expanded = expandedPaths.has(currentPath);
   const hasChildren = node.children && node.children.length > 0;
   const isFolder = node.type === 'folder';
+  const isLazyLoadable = isFolder && !hasChildren && node.has_children;
+  const isLoading = loadingPaths.has(currentPath);
   const isIncluded = includedPaths?.has(currentPath) ?? node.selected;
   const isIgnored = node.status === 'ignored';
   const isSelectable = !isIgnored;
@@ -294,9 +303,6 @@ function TreeItem({ node, depth = 0, path = '', includedPaths, onToggleInclude, 
     getEffectiveWeight(currentPath, pathWeights ?? {});
 
   const handleRowClick = () => {
-    // Fire node click callback for navigation/preview
-    onNodeClick?.(node, currentPath);
-    
     if (!isSelectable || !onToggleInclude) return;
     
     if (isFolder) {
@@ -312,6 +318,17 @@ function TreeItem({ node, depth = 0, path = '', includedPaths, onToggleInclude, 
 
   const handleExpandToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
+    // Lazy-load children for depth-truncated folders
+    if (isLazyLoadable && !expanded && onLoadChildren && !isLoading) {
+      onSetLoading(currentPath, true);
+      onLoadChildren(currentPath).then((children) => {
+        onMergeChildren(currentPath, children);
+        onToggleExpand(currentPath);
+      }).catch(() => {}).finally(() => {
+        onSetLoading(currentPath, false);
+      });
+      return;
+    }
     onToggleExpand(currentPath);
   };
 
@@ -375,7 +392,7 @@ function TreeItem({ node, depth = 0, path = '', includedPaths, onToggleInclude, 
             className="h-5 w-5 p-0 hover:bg-surface-raised text-text-subtle"
             onClick={handleExpandToggle}
           >
-            {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+            {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
           </Button>
         ) : (
           <span className="w-5" />
@@ -416,6 +433,19 @@ function TreeItem({ node, depth = 0, path = '', includedPaths, onToggleInclude, 
         )}>
           {node.name}
         </span>
+
+        {/* View file button — only for files when onNodeClick is provided */}
+        {!isFolder && onNodeClick && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 text-text-subtle hover:text-primary transition-opacity shrink-0"
+            onClick={(e: React.MouseEvent) => { e.stopPropagation(); onNodeClick(node, currentPath); }}
+            title="View file"
+          >
+            <Eye className="w-3.5 h-3.5" />
+          </Button>
+        )}
 
         {/* Right side: chunk count, status badge, then weight - always at far right */}
         <span className="ml-auto flex items-center gap-2 shrink-0">
@@ -469,6 +499,10 @@ function TreeItem({ node, depth = 0, path = '', includedPaths, onToggleInclude, 
               onWeightChange={onWeightChange}
               expandedPaths={expandedPaths}
               onToggleExpand={onToggleExpand}
+              onLoadChildren={onLoadChildren}
+              loadingPaths={loadingPaths}
+              onSetLoading={onSetLoading}
+              onMergeChildren={onMergeChildren}
             />
           ))}
         </div>
@@ -487,6 +521,7 @@ export function FolderTree({
   onNodeClick,
   pathWeights,
   onWeightChange,
+  onLoadChildren,
   className,
 }: FolderTreeProps) {
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => {
@@ -496,6 +531,16 @@ export function FolderTree({
       return stored ? new Set(JSON.parse(stored)) : new Set();
     } catch { return new Set(); }
   });
+
+  const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set());
+  const [mergedData, setMergedData] = useState<TreeNode[]>(data);
+
+  // Keep mergedData in sync when data prop changes (e.g. project switch)
+  const [prevData, setPrevData] = useState(data);
+  if (data !== prevData) {
+    setPrevData(data);
+    setMergedData(data);
+  }
 
   const handleToggleExpand = useCallback((path: string) => {
     setExpandedPaths((prev) => {
@@ -509,9 +554,39 @@ export function FolderTree({
     });
   }, []);
 
+  const handleSetLoading = useCallback((path: string, loading: boolean) => {
+    setLoadingPaths((prev) => {
+      const next = new Set(prev);
+      if (loading) next.add(path); else next.delete(path);
+      return next;
+    });
+  }, []);
+
+  const handleMergeChildren = useCallback((path: string, children: TreeNode[]) => {
+    setMergedData((prev) => {
+      // Deep-clone and merge children into the node at path
+      function mergeInto(nodes: TreeNode[], segments: string[], idx: number): TreeNode[] {
+        return nodes.map((n) => {
+          if (n.name === segments[idx]) {
+            if (idx === segments.length - 1) {
+              // Found target — set children, clear has_children flag
+              return { ...n, children, has_children: undefined };
+            }
+            if (n.children) {
+              return { ...n, children: mergeInto(n.children, segments, idx + 1) };
+            }
+          }
+          return n;
+        });
+      }
+      const segments = path.split('/');
+      return mergeInto(prev, segments, 0);
+    });
+  }, []);
+
   return (
     <div className={cn(compact ? 'text-sm' : '', className)}>
-      {data.map((node, i) => (
+      {mergedData.map((node, i) => (
         <TreeItem
           key={`${node.name}-${i}`}
           node={node}
@@ -522,6 +597,10 @@ export function FolderTree({
           onWeightChange={onWeightChange}
           expandedPaths={expandedPaths}
           onToggleExpand={handleToggleExpand}
+          onLoadChildren={onLoadChildren}
+          loadingPaths={loadingPaths}
+          onSetLoading={handleSetLoading}
+          onMergeChildren={handleMergeChildren}
         />
       ))}
     </div>

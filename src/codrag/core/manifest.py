@@ -38,6 +38,8 @@ class ManifestBuildStats:
     chunks_total: int = 0
     chunks_reused: int = 0
     chunks_embedded: int = 0
+    chunks_code: int = 0
+    chunks_docs: int = 0
     # New stats
     lines_scanned: int = 0
     lines_indexed: int = 0
@@ -79,6 +81,8 @@ def build_manifest(
             "lines_indexed": int(build.lines_indexed),
             "files_docs": int(build.files_docs),
             "files_code": int(build.files_code),
+            "chunks_code": int(build.chunks_code),
+            "chunks_docs": int(build.chunks_docs),
             "lines_docs": int(build.lines_docs),
             "lines_code": int(build.lines_code),
         },

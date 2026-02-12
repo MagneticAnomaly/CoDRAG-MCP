@@ -30,6 +30,11 @@ export type {
   FeatureAvailability,
   TaskProgress,
   LogEntry,
+  EvidenceTier,
+  DeepAnalysisScheduleConfig,
+  DeepAnalysisRunStatus,
+  TraceAugmentation,
+  AugmentationStatus,
 } from './types';
 
 // Components - Status
@@ -57,11 +62,12 @@ export { EmptyState, LoadingState, ErrorState } from './components/patterns';
 export type { EmptyStateProps, LoadingStateProps, ErrorStateProps } from './components/patterns';
 
 // Components - Dashboard
-export { IndexStatusCard, BuildCard, IndexStatsDisplay, LLMStatusWidget, UsageGuidePanel } from './components/dashboard';
-export type { IndexStatusCardProps, IndexStats, BuildCardProps, IndexStatsProps, StatItem, LLMStatusWidgetProps, LLMServiceStatus, UsageGuidePanelProps } from './components/dashboard';
+export { IndexStatusCard, IndexStatsDisplay, LLMStatusWidget, UsageGuidePanel } from './components/dashboard';
+export type { IndexStatusCardProps, IndexStats, IndexStatsProps, StatItem, LLMStatusWidgetProps, LLMServiceStatus, UsageGuidePanelProps } from './components/dashboard';
 
 // Components - LLM
-export { ModelCard, EndpointManager, AIModelsSettings } from './components/llm';
+export { ModelCard, EndpointManager, AIModelsSettings, DeepAnalysisSettings } from './components/llm';
+export type { DeepAnalysisSchedule, DeepAnalysisStatus } from './components/llm';
 
 // Components - Primitives
 export { Button } from './components/primitives/Button';

@@ -42,6 +42,11 @@ class Embedder(ABC):
 class OllamaEmbedder(Embedder):
     """Ollama-based embedder using the /api/embeddings endpoint."""
 
+    # Conservative char limit for Ollama embedding models.
+    # Code/JSON can tokenize at <1 char/token with nomic-embed-text
+    # (8192 ctx).  2000 chars is safe for all content types.
+    _DEFAULT_MAX_INPUT_CHARS = 2_000
+
     def __init__(
         self,
         model: str = "nomic-embed-text",
@@ -49,6 +54,7 @@ class OllamaEmbedder(Embedder):
         timeout_s: int = 60,
         max_retries: int = 4,
         keep_alive: str = "10m",
+        max_input_chars: Optional[int] = None,
     ):
         """
         Initialize the Ollama embedder.
@@ -59,12 +65,17 @@ class OllamaEmbedder(Embedder):
             timeout_s: Request timeout in seconds
             max_retries: Number of retry attempts for transient failures
             keep_alive: How long to keep the model loaded (e.g., "10m", "1h")
+            max_input_chars: Truncate input to this many characters before
+                             sending to Ollama.  Prevents "input length exceeds
+                             context length" 500 errors.  Defaults to 24 000
+                             (~8 k tokens for nomic-embed-text).
         """
         self.model = model
         self.base_url = base_url.rstrip("/")
         self.timeout_s = timeout_s
         self.max_retries = max_retries
         self.keep_alive = keep_alive
+        self.max_input_chars = max_input_chars if max_input_chars is not None else self._DEFAULT_MAX_INPUT_CHARS
         self._readiness_checked = False
 
     def _ensure_model_ready(self) -> None:
@@ -102,41 +113,100 @@ class OllamaEmbedder(Embedder):
         except Exception as e:
             logger.warning("Readiness check failed (non-fatal): %s", e)
 
-    def embed(self, text: str) -> EmbeddingResult:
-        """Generate an embedding for a single text."""
-        self._ensure_model_ready()
-        payload = {
-            "model": self.model,
-            "prompt": text,
-            "keep_alive": self.keep_alive,
-        }
+    def _try_embed_request(self, text: str) -> EmbeddingResult:
+        """Try /api/embed (Ollama ≥0.4) then fall back to /api/embeddings."""
+        # Truncate to stay within model context window
+        if self.max_input_chars and len(text) > self.max_input_chars:
+            logger.debug(
+                "Truncating embedding input from %d to %d chars",
+                len(text), self.max_input_chars,
+            )
+            text = text[: self.max_input_chars]
+
+        endpoints = [
+            (
+                f"{self.base_url}/api/embed",
+                {"model": self.model, "input": text, "keep_alive": self.keep_alive},
+                "embeddings",   # response key: list of vectors
+            ),
+            (
+                f"{self.base_url}/api/embeddings",
+                {"model": self.model, "prompt": text, "keep_alive": self.keep_alive},
+                "embedding",    # response key: single vector
+            ),
+        ]
 
         last_err: Optional[Exception] = None
-        for attempt in range(max(1, self.max_retries)):
+        for url, payload, key in endpoints:
             try:
-                resp = requests.post(
-                    f"{self.base_url}/api/embeddings",
-                    json=payload,
-                    timeout=self.timeout_s,
-                )
+                resp = requests.post(url, json=payload, timeout=self.timeout_s)
 
                 if resp.status_code >= 500:
-                    raise requests.HTTPError(
-                        f"{resp.status_code} Server Error for url: {resp.url}",
+                    body = ""
+                    try:
+                        body = resp.text[:500]
+                    except Exception:
+                        pass
+                    logger.warning(
+                        "Ollama %s returned %d: %s", url, resp.status_code, body,
+                    )
+                    last_err = requests.HTTPError(
+                        f"{resp.status_code} Server Error for url: {resp.url} — {body}",
                         response=resp,
                     )
+                    continue  # try next endpoint
+
+                if resp.status_code == 404:
+                    continue  # endpoint not available, try next
 
                 resp.raise_for_status()
                 data = resp.json() or {}
-                emb = data.get("embedding")
+
+                # /api/embed returns {"embeddings": [[...]]}
+                if key == "embeddings":
+                    embs = data.get("embeddings")
+                    if isinstance(embs, list) and embs:
+                        emb = embs[0]
+                    else:
+                        emb = None
+                else:
+                    emb = data.get("embedding")
+
                 if not isinstance(emb, list) or not emb:
-                    raise ValueError("Ollama embeddings response missing 'embedding'")
+                    logger.warning(
+                        "Ollama %s returned 200 but '%s' is empty/missing "
+                        "(input may still exceed context length, %d chars sent)",
+                        url, key, len(text),
+                    )
+                    last_err = ValueError(
+                        f"Ollama response missing '{key}': {str(data)[:200]}"
+                    )
+                    continue
+
                 return EmbeddingResult(
                     vector=[float(x) for x in emb],
                     model=data.get("model") or self.model,
                 )
             except (requests.RequestException, ValueError) as e:
                 last_err = e
+                continue
+
+        raise last_err or RuntimeError("Ollama embedding failed (all endpoints)")
+
+    def embed(self, text: str) -> EmbeddingResult:
+        """Generate an embedding for a single text."""
+        self._ensure_model_ready()
+
+        last_err: Optional[Exception] = None
+        for attempt in range(max(1, self.max_retries)):
+            try:
+                return self._try_embed_request(text)
+            except (requests.RequestException, ValueError) as e:
+                last_err = e
+                logger.warning(
+                    "Embedding attempt %d/%d failed: %s",
+                    attempt + 1, self.max_retries, e,
+                )
                 if attempt >= self.max_retries - 1:
                     break
 

@@ -18,6 +18,8 @@ export interface FileExplorerDetailProps {
   pathWeights?: Record<string, number>;
   /** Called when user changes weight. null removes the override. */
   onWeightChange?: (path: string, weight: number | null) => void;
+  /** Called when a depth-truncated folder is expanded — returns children to merge into the tree */
+  onLoadChildren?: (path: string) => Promise<TreeNode[]>;
   /** Initial width of the tree pane in pixels (default 384 = w-96) */
   initialTreeWidth?: number;
   className?: string;
@@ -33,6 +35,7 @@ export function FileExplorerDetail({
   onToggleInclude,
   pathWeights,
   onWeightChange,
+  onLoadChildren,
   initialTreeWidth = 768,
   className,
 }: FileExplorerDetailProps) {
@@ -125,6 +128,7 @@ export function FileExplorerDetail({
               onNodeClick={handleNodeClick}
               pathWeights={pathWeights}
               onWeightChange={onWeightChange}
+              onLoadChildren={onLoadChildren}
             />
           </div>
         </div>
@@ -142,6 +146,7 @@ export function FileExplorerDetail({
             onNodeClick={handleNodeClick}
             pathWeights={pathWeights}
             onWeightChange={onWeightChange}
+            onLoadChildren={onLoadChildren}
           />
         </div>
       </div>

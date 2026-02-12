@@ -566,7 +566,7 @@ class MCPServer:
             "traced_count": (data or {}).get("traced_count", 0) if isinstance(data, dict) else 0,
             "untraced_count": (data or {}).get("untraced_count", 0) if isinstance(data, dict) else 0,
             "stale_count": (data or {}).get("stale_count", 0) if isinstance(data, dict) else 0,
-            "ignored_count": (data or {}).get("ignored_count", 0) if isinstance(data, dict) else 0,
+            "excluded_count": (data or {}).get("excluded_count", 0) if isinstance(data, dict) else 0,
             "total_nodes": (data or {}).get("total_nodes", 0) if isinstance(data, dict) else 0,
             "total_edges": (data or {}).get("total_edges", 0) if isinstance(data, dict) else 0,
             "building": bool((data or {}).get("building", False)) if isinstance(data, dict) else False,

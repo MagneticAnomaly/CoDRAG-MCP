@@ -25,8 +25,8 @@ export interface TraceCoveragePanelProps {
   untracedFiles: TraceCoverageFile[];
   /** Stale files (traced but content changed) */
   staleFiles: TraceCoverageFile[];
-  /** Ignored files (excluded by trace ignore patterns) */
-  ignoredFiles: TraceCoverageFile[];
+  /** Excluded files (excluded by user-configured patterns) */
+  excludedFiles: TraceCoverageFile[];
   /** Whether trace is currently building */
   building: boolean;
   /** Progress of current build */
@@ -37,10 +37,10 @@ export interface TraceCoveragePanelProps {
   onTraceAll: () => void;
   /** Trigger re-trace for stale files only */
   onRetraceStale: () => void;
-  /** Add an ignore pattern */
-  onAddIgnorePattern: (pattern: string) => void;
-  /** Remove an ignore pattern (un-ignore a file) */
-  onRemoveIgnorePattern: (pattern: string) => void;
+  /** Add an exclude pattern */
+  onAddExcludePattern: (pattern: string) => void;
+  /** Remove an exclude pattern (un-exclude a file) */
+  onRemoveExcludePattern: (pattern: string) => void;
   /** Refresh coverage data */
   onRefresh: () => void;
   className?: string;
@@ -220,20 +220,20 @@ export function TraceCoveragePanel({
   summary,
   untracedFiles,
   staleFiles,
-  ignoredFiles,
+  excludedFiles = [],
   building,
   progress,
   loading,
   onTraceAll,
   onRetraceStale,
-  onAddIgnorePattern,
-  onRemoveIgnorePattern,
+  onAddExcludePattern,
+  onRemoveExcludePattern,
   onRefresh,
   className,
   bare = false,
 }: TraceCoveragePanelProps) {
-  const [activeTab, setActiveTab] = useState<'queue' | 'ignored'>('queue');
-  const [ignoreInput, setIgnoreInput] = useState('');
+  const [activeTab, setActiveTab] = useState<'queue' | 'excluded'>('queue');
+  const [excludeInput, setExcludeInput] = useState('');
   const [compact, setCompact] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -249,20 +249,20 @@ export function TraceCoveragePanel({
     return () => observer.disconnect();
   }, []);
 
-  const handleAddIgnore = useCallback(() => {
-    const pattern = ignoreInput.trim();
+  const handleAddExclude = useCallback(() => {
+    const pattern = excludeInput.trim();
     if (pattern) {
-      onAddIgnorePattern(pattern);
-      setIgnoreInput('');
+      onAddExcludePattern(pattern);
+      setExcludeInput('');
     }
-  }, [ignoreInput, onAddIgnorePattern]);
+  }, [excludeInput, onAddExcludePattern]);
 
-  const handleIgnoreKeyDown = useCallback(
+  const handleExcludeKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter') handleAddIgnore();
-      if (e.key === 'Escape') setIgnoreInput('');
+      if (e.key === 'Enter') handleAddExclude();
+      if (e.key === 'Escape') setExcludeInput('');
     },
-    [handleAddIgnore]
+    [handleAddExclude]
   );
 
   const queueCount = untracedFiles.length + staleFiles.length;
@@ -340,18 +340,18 @@ export function TraceCoveragePanel({
         <button
           className={cn(
             'flex-1 text-xs font-medium py-2 px-3 transition-colors border-b-2',
-            activeTab === 'ignored'
+            activeTab === 'excluded'
               ? 'border-primary text-primary'
               : 'border-transparent text-text-muted hover:text-text'
           )}
-          onClick={() => setActiveTab('ignored')}
+          onClick={() => setActiveTab('excluded')}
         >
           <span className="flex items-center justify-center gap-1.5">
             <EyeOff className="w-3.5 h-3.5" />
-            Ignored
-            {ignoredFiles.length > 0 && (
+            Excluded
+            {excludedFiles.length > 0 && (
               <span className="text-[10px] bg-text-subtle/15 text-text-subtle px-1.5 py-0.5 rounded-full font-mono">
-                {ignoredFiles.length}
+                {excludedFiles.length}
               </span>
             )}
           </span>
@@ -379,15 +379,15 @@ export function TraceCoveragePanel({
                   action={
                     untracedFiles.length > 0 && !building ? (
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
-                        className="text-[10px] h-5 px-2 text-primary"
+                        className="h-6 px-2 text-xs gap-1.5"
                         onClick={(e) => {
                           e.stopPropagation();
                           onTraceAll();
                         }}
                       >
-                        <Play className="w-3 h-3 mr-1" />
+                        <Play className="w-3 h-3" />
                         Map All
                       </Button>
                     ) : undefined
@@ -407,15 +407,15 @@ export function TraceCoveragePanel({
                   action={
                     staleFiles.length > 0 && !building ? (
                       <Button
-                        variant="ghost"
+                        variant="default"
                         size="sm"
-                        className="text-[10px] h-5 px-2 text-warning"
+                        className="h-6 px-2 text-xs gap-1.5 bg-amber-500/10 text-amber-500 border-amber-500/20 hover:bg-amber-500/20 hover:border-amber-500/30"
                         onClick={(e) => {
                           e.stopPropagation();
                           onRetraceStale();
                         }}
                       >
-                        <RefreshCw className="w-3 h-3 mr-1" />
+                        <RefreshCw className="w-3 h-3" />
                         Update Map
                       </Button>
                     ) : undefined
@@ -430,23 +430,23 @@ export function TraceCoveragePanel({
           </div>
         )}
 
-        {activeTab === 'ignored' && (
+        {activeTab === 'excluded' && (
           <div className="p-2 space-y-2">
-            {/* Add ignore pattern input */}
+            {/* Add exclude pattern input */}
             <div className="flex items-center gap-1.5 px-2">
               <div className="flex-1 flex items-center gap-1.5 bg-surface border border-border rounded-md px-2 py-1">
                 <Search className="w-3.5 h-3.5 text-text-subtle shrink-0" />
                 <input
                   type="text"
-                  value={ignoreInput}
-                  onChange={(e) => setIgnoreInput(e.target.value)}
-                  onKeyDown={handleIgnoreKeyDown}
-                  placeholder="Add ignore pattern (e.g. **/tests/**)"
+                  value={excludeInput}
+                  onChange={(e) => setExcludeInput(e.target.value)}
+                  onKeyDown={handleExcludeKeyDown}
+                  placeholder="Add exclude pattern (e.g. **/tests/**)"
                   className="flex-1 text-xs bg-transparent outline-none text-text placeholder:text-text-subtle"
                 />
-                {ignoreInput && (
+                {excludeInput && (
                   <button
-                    onClick={() => setIgnoreInput('')}
+                    onClick={() => setExcludeInput('')}
                     className="text-text-subtle hover:text-text"
                   >
                     <X className="w-3 h-3" />
@@ -457,29 +457,29 @@ export function TraceCoveragePanel({
                 variant="ghost"
                 size="icon-sm"
                 className="h-7 w-7 shrink-0"
-                onClick={handleAddIgnore}
-                disabled={!ignoreInput.trim()}
+                onClick={handleAddExclude}
+                disabled={!excludeInput.trim()}
                 title="Add pattern"
               >
                 <Plus className="w-3.5 h-3.5" />
               </Button>
             </div>
 
-            {ignoredFiles.length === 0 ? (
+            {excludedFiles.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 text-text-muted">
                 <EyeOff className="w-8 h-8 mb-2 opacity-30" />
-                <p className="text-xs font-medium">No ignored files</p>
-                <p className="text-[10px] mt-1">Add patterns above to exclude files from map</p>
+                <p className="text-xs font-medium">No excluded files</p>
+                <p className="text-[10px] mt-1">Add patterns above to exclude files from tracing</p>
               </div>
             ) : (
               <div>
-                {ignoredFiles.map((f) => (
+                {excludedFiles.map((f) => (
                   <FileRow
                     key={f.path}
                     file={f}
                     timeField="modified"
-                    actionLabel="Un-ignore"
-                    onAction={(path) => onRemoveIgnorePattern(path)}
+                    actionLabel="Include"
+                    onAction={(path) => onRemoveExcludePattern(path)}
                     compact={compact}
                   />
                 ))}

@@ -198,7 +198,7 @@ export interface TraceCoverageSummary {
   traced: number;
   untraced: number;
   stale: number;
-  ignored: number;
+  excluded: number;
   coverage_pct: number;
   last_build_at: string | null;
 }
@@ -210,7 +210,7 @@ export interface TraceCoverage {
   traced: TraceCoverageFile[];
   untraced: TraceCoverageFile[];
   stale: TraceCoverageFile[];
-  ignored: TraceCoverageFile[];
+  excluded: TraceCoverageFile[];
   summary: TraceCoverageSummary;
   building: boolean;
 }
@@ -226,6 +226,94 @@ export interface TraceExpandOptions {
   max_nodes: number;
   max_additional_chunks: number;
   max_additional_chars: number;
+}
+
+// ============================================================
+// Phase 04B - Deep Analysis / LLM Augmentation Types
+// ============================================================
+
+/**
+ * Evidence tier for retrieval scoping.
+ * Tier 0 = ground truth only (no LLM content), used by validation.
+ * Tier 1 = ground truth + verified high-confidence augmentations.
+ * Tier 2 = everything including unverified augmentations (default search).
+ */
+export type EvidenceTier = 0 | 1 | 2;
+
+/**
+ * Deep analysis schedule mode
+ */
+export type DeepAnalysisMode = 'manual' | 'threshold' | 'scheduled';
+
+/**
+ * Deep analysis priority ordering
+ */
+export type DeepAnalysisPriority = 'lowest_confidence' | 'highest_connectivity';
+
+/**
+ * Schedule frequency
+ */
+export type ScheduleFrequency = 'daily' | 'weekly' | 'biweekly' | 'monthly';
+
+/**
+ * Deep analysis schedule configuration (persisted in global config)
+ */
+export interface DeepAnalysisScheduleConfig {
+  mode: DeepAnalysisMode;
+  threshold_percent?: number;
+  frequency?: ScheduleFrequency;
+  day_of_week?: number;
+  hour?: number;
+  budget_max_tokens: number;
+  budget_max_minutes: number;
+  budget_max_items: number;
+  priority: DeepAnalysisPriority;
+}
+
+/**
+ * Deep analysis run status from API
+ */
+export interface DeepAnalysisRunStatus {
+  last_run_at?: string;
+  last_run_items?: number;
+  last_run_tokens?: number;
+  next_run_at?: string;
+  queue_size?: number;
+  avg_confidence?: number;
+  running?: boolean;
+  current_item?: string;
+  progress_pct?: number;
+}
+
+/**
+ * Trace augmentation entry (per-node overlay)
+ */
+export interface TraceAugmentation {
+  node_id: string;
+  summary: string;
+  role: string;
+  confidence: number;
+  augmented_at: string;
+  model: string;
+  version: number;
+  validated?: boolean;
+  validated_at?: string;
+  validated_by?: string;
+}
+
+/**
+ * Augmentation status summary
+ */
+export interface AugmentationStatus {
+  enabled: boolean;
+  total_nodes: number;
+  augmented_nodes: number;
+  validated_nodes: number;
+  avg_confidence: number;
+  low_confidence_count: number;
+  last_augment_at?: string;
+  last_validate_at?: string;
+  model?: string;
 }
 
 // ============================================================
@@ -526,6 +614,7 @@ export interface GlobalConfig {
   trace?: { enabled: boolean };
   auto_rebuild?: { enabled: boolean; debounce_ms?: number };
   llm_config?: LLMConfig;
+  deep_analysis?: DeepAnalysisScheduleConfig;
 }
 
 /**

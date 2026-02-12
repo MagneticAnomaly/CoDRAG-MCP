@@ -15,6 +15,8 @@ export interface FolderTreePanelProps {
   pathWeights?: Record<string, number>;
   /** Called when user changes weight. null removes the override (inherits parent weight). */
   onWeightChange?: (path: string, weight: number | null) => void;
+  /** Called when a depth-truncated folder is expanded — returns children to merge into the tree */
+  onLoadChildren?: (path: string) => Promise<TreeNode[]>;
   title?: string;
   className?: string;
   bare?: boolean;
@@ -27,6 +29,7 @@ export function FolderTreePanel({
   onNodeClick,
   pathWeights,
   onWeightChange,
+  onLoadChildren,
   title = 'Knowledge Scope',
   className,
   bare = false,
@@ -55,6 +58,7 @@ export function FolderTreePanel({
             onNodeClick={onNodeClick}
             pathWeights={pathWeights}
             onWeightChange={onWeightChange}
+            onLoadChildren={onLoadChildren}
           />
         </div>
       </div>

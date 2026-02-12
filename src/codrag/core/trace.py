@@ -632,10 +632,17 @@ class TraceBuilder:
 
         return manifest
 
+    _PRUNE_DIRS = {
+        "node_modules", ".git", ".venv", "venv", "__pycache__",
+        "dist", "build", ".next", ".tox", ".mypy_cache",
+        ".pytest_cache", ".eggs", "egg-info", ".cargo", "target",
+    }
+
     def _enumerate_files(self) -> List[Path]:
         all_files: List[Path] = []
 
-        for root, _dirs, files in os.walk(self.repo_root):
+        for root, dirs, files in os.walk(self.repo_root):
+            dirs[:] = [d for d in dirs if d not in self._PRUNE_DIRS]
             root_path = Path(root)
             for fname in files:
                 file_path = root_path / fname
@@ -1038,17 +1045,23 @@ def compute_trace_coverage(
     index_dir: Path,
     include_globs: Optional[List[str]] = None,
     exclude_globs: Optional[List[str]] = None,
+    user_exclude_globs: Optional[List[str]] = None,
     max_file_bytes: int = 500_000,
 ) -> Dict[str, Any]:
     """
     Compute trace coverage by comparing current filesystem against trace manifest.
 
+    Args:
+      exclude_globs: default/system patterns — files matching these are silently skipped.
+      user_exclude_globs: user-configured patterns — files matching these appear in the
+                          'excluded' list so users can see what they manually excluded.
+
     Returns dict with:
       - traced: files that are traced and up-to-date
       - untraced: files eligible for trace but not yet traced
       - stale: files that were traced but content has changed
-      - ignored: files explicitly excluded by trace ignore patterns
-      - summary: {total, traced, untraced, stale, ignored, coverage_pct}
+      - excluded: files explicitly excluded by user-configured patterns
+      - summary: {total, traced, untraced, stale, excluded, coverage_pct}
     """
     repo_root = Path(repo_root).resolve()
 
@@ -1067,6 +1080,8 @@ def compute_trace_coverage(
             "**/dist/**",
             "**/build/**",
         ]
+    if user_exclude_globs is None:
+        user_exclude_globs = []
 
     # Load trace manifest file_hashes (if exists)
     manifest_path = Path(index_dir) / "trace_manifest.json"
@@ -1081,13 +1096,22 @@ def compute_trace_coverage(
         except Exception:
             pass
 
-    # Enumerate all files in repo (both eligible and ignored)
+    # Directories to always prune from os.walk — these are never interesting
+    # and can contain tens of thousands of files (e.g. node_modules).
+    _PRUNE_DIRS = {
+        "node_modules", ".git", ".venv", "venv", "__pycache__",
+        "dist", "build", ".next", ".tox", ".mypy_cache",
+        ".pytest_cache", ".eggs", "egg-info", ".cargo", "target",
+    }
+
     traced_files: List[Dict[str, Any]] = []
     untraced_files: List[Dict[str, Any]] = []
     stale_files: List[Dict[str, Any]] = []
-    ignored_files: List[Dict[str, Any]] = []
+    excluded_files: List[Dict[str, Any]] = []
 
-    for root_dir, _dirs, filenames in os.walk(repo_root):
+    for root_dir, dirs, filenames in os.walk(repo_root):
+        # Prune noisy directories in-place so os.walk never descends into them
+        dirs[:] = [d for d in dirs if d not in _PRUNE_DIRS]
         root_path = Path(root_dir)
         for fname in filenames:
             file_path = root_path / fname
@@ -1116,17 +1140,33 @@ def compute_trace_coverage(
             if not matches_any_include:
                 continue
 
-            # Check if excluded
-            is_excluded = False
+            # Check if excluded by default/system patterns (silently skip)
+            is_default_excluded = False
             for g in exclude_globs:
                 patterns = [g]
                 if g.startswith("**/"):
                     patterns.append(g[3:])
                 for p in patterns:
                     if fnmatch(rel_path, p) or fnmatch(base, p):
-                        is_excluded = True
+                        is_default_excluded = True
                         break
-                if is_excluded:
+                if is_default_excluded:
+                    break
+
+            if is_default_excluded:
+                continue
+
+            # Check if excluded by user-configured patterns (show in 'excluded' list)
+            is_user_excluded = False
+            for g in user_exclude_globs:
+                patterns = [g]
+                if g.startswith("**/"):
+                    patterns.append(g[3:])
+                for p in patterns:
+                    if fnmatch(rel_path, p) or fnmatch(base, p):
+                        is_user_excluded = True
+                        break
+                if is_user_excluded:
                     break
 
             # Get file stat for timestamps
@@ -1151,8 +1191,8 @@ def compute_trace_coverage(
                 "created": created_ts,
             }
 
-            if is_excluded:
-                ignored_files.append(file_info)
+            if is_user_excluded:
+                excluded_files.append(file_info)
                 continue
 
             # Compare against manifest hashes
@@ -1177,7 +1217,7 @@ def compute_trace_coverage(
     traced_files.sort(key=lambda f: f["path"])
     untraced_files.sort(key=lambda f: f["path"])
     stale_files.sort(key=lambda f: f["path"])
-    ignored_files.sort(key=lambda f: f["path"])
+    excluded_files.sort(key=lambda f: f["path"])
 
     total = len(traced_files) + len(untraced_files) + len(stale_files)
     coverage_pct = round(len(traced_files) / total * 100, 1) if total > 0 else 0.0
@@ -1186,13 +1226,13 @@ def compute_trace_coverage(
         "traced": traced_files,
         "untraced": untraced_files,
         "stale": stale_files,
-        "ignored": ignored_files,
+        "excluded": excluded_files,
         "summary": {
             "total": total,
             "traced": len(traced_files),
             "untraced": len(untraced_files),
             "stale": len(stale_files),
-            "ignored": len(ignored_files),
+            "excluded": len(excluded_files),
             "coverage_pct": coverage_pct,
             "last_build_at": manifest_built_at,
         },
