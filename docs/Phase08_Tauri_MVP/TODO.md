@@ -8,9 +8,9 @@
 - Deployment spec: `../Phase11_Deployment/README.md`
 
 ## Research completion checklist (P08-R*)
-- [ ] P08-R1 Choose packaging approach (PyInstaller vs PyOxidizer) and document rationale
-- [ ] P08-R2 Specify port/binding strategy and single-instance behavior
-- [ ] P08-R3 Specify OS-specific data directories and signing/notarization requirements
+- [x] P08-R1 Choose packaging approach (PyInstaller vs PyOxidizer) and document rationale ✅ **DONE: PyInstaller (see PACKAGING_STRATEGY.md)**
+- [x] P08-R2 Specify port/binding strategy and single-instance behavior ✅ **DONE: Port 8400 / 127.0.0.1 (see PACKAGING_STRATEGY.md)**
+- [x] P08-R3 Specify OS-specific data directories and signing/notarization requirements ✅ **DONE: Standard paths (see PACKAGING_STRATEGY.md)**
 
 ## Implementation backlog (P08-I*)
 ### Sidecar lifecycle

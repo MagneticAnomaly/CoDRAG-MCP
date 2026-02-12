@@ -366,6 +366,8 @@ def _load_ui_config() -> Dict[str, Any]:
             "max_file_bytes",
             "trace",
             "auto_rebuild",
+            "ui_preferences",
+            "module_layout",
         ]:
             if key in data:
                 cfg[key] = data[key]
@@ -2672,7 +2674,13 @@ def _get_llm_client_for_slot(slot: str) -> Optional["LLMClient"]:
     ep = next((e for e in endpoints if e.get("id") == ep_id), None)
     if not ep:
         return None
-    return LLMClient(endpoint_url=ep["url"], model=slot_cfg["model"])
+    
+    return LLMClient(
+        endpoint_url=ep["url"],
+        model=slot_cfg["model"],
+        provider=ep.get("provider", "ollama"),
+        api_key=ep.get("api_key"),
+    )
 
 
 @app.get("/projects/{project_id}/augment/status")
@@ -2773,11 +2781,14 @@ def deep_analysis_run_project(project_id: str, req: DeepAnalysisRequest) -> Dict
 
     llm_client = _get_llm_client_for_slot("large")
     if not llm_client:
+        # Fall back to fast/small model if no large model configured
+        llm_client = _get_llm_client_for_slot("small")
+    if not llm_client:
         raise ApiException(
             status_code=409,
-            code="NO_LARGE_MODEL",
-            message="No large model configured",
-            hint="Configure a Large Model in AI Models settings.",
+            code="NO_MODEL",
+            message="No model configured for deep analysis",
+            hint="Configure a model in AI Models settings.",
         )
 
     if not llm_client.is_available():
@@ -2838,6 +2849,118 @@ def deep_analysis_run_project(project_id: str, req: DeepAnalysisRequest) -> Dict
     t = threading.Thread(target=_run, daemon=True)
     t.start()
     return ok({"started": True, "task_id": task_id})
+
+
+@app.get("/llm/slots/status")
+def get_llm_slots_status() -> Dict[str, Any]:
+    """Check connectivity for all configured model slots (embedding, small, large).
+    
+    Returns per-slot status with endpoint reachability and model availability.
+    """
+    ui_cfg = _load_ui_config()
+    llm_cfg = ui_cfg.get("llm_config") or {}
+    endpoints = llm_cfg.get("saved_endpoints") or []
+    ep_map = {e["id"]: e for e in endpoints if isinstance(e, dict) and e.get("id")}
+
+    def _check_slot(slot_key: str) -> Dict[str, Any]:
+        slot_cfg = llm_cfg.get(slot_key) or {}
+        if not isinstance(slot_cfg, dict):
+            return {"configured": False, "status": "not_configured"}
+
+        ep_id = slot_cfg.get("endpoint_id") or ""
+        model = slot_cfg.get("model") or ""
+        enabled = bool(slot_cfg.get("enabled", False))
+
+        if not ep_id or not model:
+            return {"configured": False, "status": "not_configured"}
+
+        ep = ep_map.get(ep_id)
+        if not ep:
+            return {
+                "configured": True, "enabled": enabled, "model": model,
+                "endpoint_id": ep_id, "status": "endpoint_missing",
+                "error": f"Endpoint '{ep_id}' not found in saved endpoints",
+            }
+
+        url = str(ep.get("url", "")).rstrip("/")
+        provider = ep.get("provider", "ollama")
+
+        # Try to reach the endpoint
+        try:
+            if provider == "ollama":
+                r = requests.get(f"{url}/api/tags", timeout=3)
+                reachable = r.status_code == 200
+                # Check if model is in the list
+                model_found = False
+                if reachable:
+                    tags = r.json().get("models", []) if isinstance(r.json(), dict) else []
+                    model_found = any(
+                        str(m.get("name", "")).startswith(model.split(":")[0])
+                        for m in tags if isinstance(m, dict)
+                    )
+            else:
+                # OpenAI-compatible: check /v1/models or just connectivity
+                r = requests.get(f"{url}/models", timeout=3, headers={
+                    "Authorization": f"Bearer {ep.get('api_key', '')}",
+                })
+                reachable = r.status_code in (200, 401)  # 401 = reachable but bad key
+                model_found = r.status_code == 200
+        except Exception as e:
+            return {
+                "configured": True, "enabled": enabled, "model": model,
+                "endpoint_id": ep_id, "endpoint_url": url, "provider": provider,
+                "status": "unreachable", "error": str(e),
+            }
+
+        if not reachable:
+            return {
+                "configured": True, "enabled": enabled, "model": model,
+                "endpoint_id": ep_id, "endpoint_url": url, "provider": provider,
+                "status": "unreachable", "error": "Endpoint did not respond",
+            }
+
+        return {
+            "configured": True, "enabled": enabled, "model": model,
+            "endpoint_id": ep_id, "endpoint_url": url, "provider": provider,
+            "status": "connected" if model_found else "connected_no_model",
+            "model_available": model_found,
+        }
+
+    # Check embedding separately (it has a different config shape)
+    emb_cfg = llm_cfg.get("embedding") or {}
+    emb_source = emb_cfg.get("source", "")
+    if emb_source == "endpoint":
+        emb_status = _check_slot("embedding")
+        # Patch: embedding uses endpoint_id/model at top level of embedding config
+        if not emb_status.get("configured"):
+            ep_id = emb_cfg.get("endpoint_id", "")
+            model = emb_cfg.get("model", "")
+            if ep_id and model:
+                ep = ep_map.get(ep_id)
+                url = str((ep or {}).get("url", "")).rstrip("/") if ep else ""
+                try:
+                    r = requests.get(f"{url}/api/tags", timeout=3)
+                    emb_status = {
+                        "configured": True, "enabled": True, "model": model,
+                        "endpoint_id": ep_id, "endpoint_url": url,
+                        "status": "connected" if r.status_code == 200 else "unreachable",
+                    }
+                except Exception as e:
+                    emb_status = {
+                        "configured": True, "enabled": True, "model": model,
+                        "endpoint_id": ep_id, "endpoint_url": url,
+                        "status": "unreachable", "error": str(e),
+                    }
+    elif emb_source == "huggingface":
+        emb_status = {"configured": True, "enabled": True, "source": "huggingface", "status": "local"}
+    else:
+        emb_status = {"configured": False, "status": "not_configured"}
+
+    return ok({
+        "embedding": emb_status,
+        "small_model": _check_slot("small_model"),
+        "large_model": _check_slot("large_model"),
+    })
 
 
 @app.get("/llm/status")
@@ -3109,14 +3232,6 @@ def proxy_test_model(req: LLMModelTestRequest) -> Dict[str, Any]:
                         "model_status": model_status_str,
                     })
 
-                if readiness.status == ModelStatus.ERROR:
-                    message = readiness.message
-                    return ok({
-                        "success": False,
-                        "message": message,
-                        "model_status": model_status_str,
-                    })
-
                 if readiness.status == ModelStatus.LOADING:
                     message = readiness.message
                     return ok({
@@ -3125,27 +3240,43 @@ def proxy_test_model(req: LLMModelTestRequest) -> Dict[str, Any]:
                         "model_status": model_status_str,
                     })
 
-                # Model is READY — now send the actual test request
-                # with a generous timeout (model is already loaded).
-                r = requests.post(
-                    f"{url}/api/generate",
-                    json={"model": req.model, "prompt": "Hi", "stream": False},
-                    timeout=30,
-                )
-                
-                if r.status_code == 200:
-                    success = True
-                    load_info = ""
-                    try:
-                        resp_data = r.json()
-                        load_ns = resp_data.get("load_duration", 0)
-                        if load_ns > 0:
-                            load_info = f" (load: {load_ns / 1e9:.1f}s)"
-                    except Exception:
-                        pass
-                    message = f"Model responded successfully{load_info}"
-                else:
-                    message = f"HTTP {r.status_code}: {r.text[:100]}"
+                # Model exists (READY, DOWNLOADED, or ERROR from failed
+                # preload).  Send the actual test request — this surfaces
+                # real Ollama errors (e.g. broken templates) instead of
+                # a generic "preload request failed" message.
+                try:
+                    r = requests.post(
+                        f"{url}/api/generate",
+                        json={"model": req.model, "prompt": "Hi", "stream": False},
+                        timeout=30,
+                    )
+
+                    if r.status_code == 200:
+                        success = True
+                        load_info = ""
+                        try:
+                            resp_data = r.json()
+                            load_ns = resp_data.get("load_duration", 0)
+                            if load_ns > 0:
+                                load_info = f" (load: {load_ns / 1e9:.1f}s)"
+                        except Exception:
+                            pass
+                        message = f"Model responded successfully{load_info}"
+                        model_status_str = ModelStatus.READY.value
+                    else:
+                        # Surface the actual Ollama error message
+                        try:
+                            err_data = r.json()
+                            ollama_err = err_data.get("error", "")
+                        except Exception:
+                            ollama_err = ""
+                        if ollama_err:
+                            message = f"Ollama error: {ollama_err}"
+                        else:
+                            message = f"HTTP {r.status_code}: {r.text[:200]}"
+                except requests.Timeout:
+                    message = f"Model '{req.model}' timed out (may still be loading)"
+                    model_status_str = ModelStatus.LOADING.value
                 
         elif req.provider in ("openai", "openai-compatible"):
             headers = {}
@@ -3202,7 +3333,7 @@ def context(req: ContextRequest, response: Response):
     logger.warning("DEPRECATED: /api/code-index/context called - migrate to /projects/{id}/context")
     
     if not req.query.strip():
-        raise HTTPException(status_code=400, detail="query is required")
+        raise ApiException(status_code=400, code="VALIDATION_ERROR", message="query is required")
 
     idx = _get_index()
     
@@ -3310,7 +3441,7 @@ def chunk(req: ChunkRequest, response: Response):
     idx = _get_index()
     doc = idx.get_chunk(req.chunk_id)
     if doc is None:
-        raise HTTPException(status_code=404, detail="Chunk not found")
+        raise ApiException(status_code=404, code="CHUNK_NOT_FOUND", message="Chunk not found")
     return ok({"chunk": doc})
 
 
@@ -3348,16 +3479,54 @@ def get_mcp_config(
     return ok(payload)
 
 
+@app.get("/global/config")
+def get_global_config_v2() -> Dict[str, Any]:
+    """Get global UI configuration."""
+    return ok(_load_ui_config())
+
+
+@app.put("/global/config")
+async def update_global_config_v2(req: Request) -> Dict[str, Any]:
+    """Update global UI configuration (merge update)."""
+    try:
+        data = await req.json()
+    except Exception:
+        raise ApiException(status_code=400, code="INVALID_JSON", message="Invalid JSON body")
+
+    if not isinstance(data, dict):
+        raise ApiException(status_code=400, code="VALIDATION_ERROR", message="Config must be a JSON object")
+
+    current = _load_ui_config()
+
+    old_emb = (current.get("llm_config") or {}).get("embedding") or {}
+    new_emb = (data.get("llm_config") or {}).get("embedding") or {}
+    embedding_changed = new_emb and (
+        new_emb.get("source") != old_emb.get("source")
+        or new_emb.get("endpoint_id") != old_emb.get("endpoint_id")
+        or new_emb.get("model") != old_emb.get("model")
+    )
+
+    _deep_merge(current, data)
+    _save_ui_config(current)
+
+    if embedding_changed:
+        global _index
+        _index = None
+        _project_indexes.clear()
+        logger.info("Embedding config changed — cleared cached indexes")
+
+    return ok(current)
+
+
 @app.get("/api/code-index/config", deprecated=True)
 def get_global_config(response: Response) -> Dict[str, Any]:
     """Get global UI configuration.
     
-    DEPRECATED: This is a global config endpoint that does not support multi-project.
-    Consider using project-specific configuration via /projects/{project_id}/config.
+    DEPRECATED: Use GET /global/config instead.
     """
     response.headers["Deprecation"] = "true"
     response.headers["Sunset"] = "2026-06-01"
-    logger.warning("DEPRECATED: GET /api/code-index/config called")
+    logger.warning("DEPRECATED: GET /api/code-index/config called — migrate to /global/config")
     return ok(_load_ui_config())
 
 
@@ -3365,12 +3534,11 @@ def get_global_config(response: Response) -> Dict[str, Any]:
 async def update_global_config(req: Request, response: Response) -> Dict[str, Any]:
     """Update global UI configuration (merge update).
     
-    DEPRECATED: This is a global config endpoint that does not support multi-project.
-    Consider using project-specific configuration via /projects/{project_id}/config.
+    DEPRECATED: Use PUT /global/config instead.
     """
     response.headers["Deprecation"] = "true"
     response.headers["Sunset"] = "2026-06-01"
-    logger.warning("DEPRECATED: PUT /api/code-index/config called")
+    logger.warning("DEPRECATED: PUT /api/code-index/config called — migrate to /global/config")
     
     try:
         data = await req.json()

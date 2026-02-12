@@ -30,6 +30,7 @@ export interface DeepAnalysisSettingsProps {
   onScheduleChange: (schedule: DeepAnalysisSchedule) => void;
   status?: DeepAnalysisStatus;
   largeModelConfigured?: boolean;
+  fastModelConfigured?: boolean;
   onRunNow?: () => void;
   running?: boolean;
   className?: string;
@@ -90,6 +91,7 @@ export function DeepAnalysisSettings({
   onScheduleChange,
   status,
   largeModelConfigured = false,
+  fastModelConfigured = false,
   onRunNow,
   running = false,
   className,
@@ -112,11 +114,19 @@ export function DeepAnalysisSettings({
       </div>
 
       {/* Model requirement warning */}
-      {!largeModelConfigured && (
+      {!largeModelConfigured && !fastModelConfigured && (
         <div className="flex gap-2 p-3 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-500">
           <Info className="w-4 h-4 shrink-0 mt-0.5" />
           <span className="text-xs">
-            Configure a <strong>Large Model</strong> in AI Models settings to enable deep analysis.
+            Configure a model in <strong>AI Models</strong> settings to enable deep analysis.
+          </span>
+        </div>
+      )}
+      {!largeModelConfigured && fastModelConfigured && (
+        <div className="flex gap-2 p-3 rounded-md bg-blue-500/10 border border-blue-500/20 text-blue-400">
+          <Info className="w-4 h-4 shrink-0 mt-0.5" />
+          <span className="text-xs">
+            Using <strong>Fast Model</strong> for deep analysis. For best results, configure a <strong>Thinking Model</strong> (reasoning-capable).
           </span>
         </div>
       )}
@@ -131,7 +141,7 @@ export function DeepAnalysisSettings({
           onChange={(e) => update({ mode: e.target.value as DeepAnalysisSchedule['mode'] })}
           options={MODE_OPTIONS}
           size="sm"
-          disabled={!largeModelConfigured}
+          disabled={!largeModelConfigured && !fastModelConfigured}
         />
 
         {schedule.mode === 'threshold' && (
@@ -145,7 +155,7 @@ export function DeepAnalysisSettings({
               min={5}
               max={80}
               step={5}
-              disabled={!largeModelConfigured}
+              disabled={!largeModelConfigured && !fastModelConfigured}
             />
           </div>
         )}
@@ -160,7 +170,7 @@ export function DeepAnalysisSettings({
                   onChange={(e) => update({ frequency: e.target.value as DeepAnalysisSchedule['frequency'] })}
                   options={FREQUENCY_OPTIONS}
                   size="sm"
-                  disabled={!largeModelConfigured}
+                  disabled={!largeModelConfigured && !fastModelConfigured}
                 />
               </div>
               {(schedule.frequency ?? 'weekly') !== 'daily' && (
@@ -171,7 +181,7 @@ export function DeepAnalysisSettings({
                     onChange={(e) => update({ day_of_week: Number(e.target.value) })}
                     options={DAY_OPTIONS}
                     size="sm"
-                    disabled={!largeModelConfigured}
+                    disabled={!largeModelConfigured && !fastModelConfigured}
                   />
                 </div>
               )}
@@ -183,7 +193,7 @@ export function DeepAnalysisSettings({
                 onChange={(e) => update({ hour: Number(e.target.value) })}
                 options={HOUR_OPTIONS}
                 size="sm"
-                disabled={!largeModelConfigured}
+                disabled={!largeModelConfigured && !fastModelConfigured}
               />
             </div>
           </div>
@@ -204,7 +214,7 @@ export function DeepAnalysisSettings({
               min={1000}
               max={500000}
               step={5000}
-              disabled={!largeModelConfigured}
+              disabled={!largeModelConfigured && !fastModelConfigured}
             />
           </div>
           <div className="space-y-1">
@@ -215,7 +225,7 @@ export function DeepAnalysisSettings({
               min={5}
               max={480}
               step={5}
-              disabled={!largeModelConfigured}
+              disabled={!largeModelConfigured && !fastModelConfigured}
             />
           </div>
           <div className="space-y-1">
@@ -226,7 +236,7 @@ export function DeepAnalysisSettings({
               min={10}
               max={1000}
               step={10}
-              disabled={!largeModelConfigured}
+              disabled={!largeModelConfigured && !fastModelConfigured}
             />
           </div>
         </div>
@@ -240,7 +250,7 @@ export function DeepAnalysisSettings({
           onChange={(e) => update({ priority: e.target.value as DeepAnalysisSchedule['priority'] })}
           options={PRIORITY_OPTIONS}
           size="sm"
-          disabled={!largeModelConfigured}
+          disabled={!largeModelConfigured && !fastModelConfigured}
         />
       </section>
 
@@ -287,7 +297,7 @@ export function DeepAnalysisSettings({
           variant="outline"
           size="sm"
           onClick={onRunNow}
-          disabled={!largeModelConfigured || running}
+          disabled={(!largeModelConfigured && !fastModelConfigured) || running}
           className="w-full"
         >
           <Play className="w-3.5 h-3.5 mr-1.5" />

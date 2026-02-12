@@ -15,6 +15,7 @@ const ibmPlexSans = IBM_Plex_Sans({ weight: ['400', '500', '600', '700'], subset
 const ibmPlexMono = IBM_Plex_Mono({ weight: ['400', '500', '600'], subsets: ['latin'], variable: '--font-ibm-mono' });
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://codrag.io'),
   title: 'CoDRAG - Local-first Code Context',
   description: 'Semantic search and trace-aware context for your codebase. Local-first, no cloud required.',
 };
@@ -23,6 +24,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" data-codrag-theme="k" className={`${inter.variable} ${jetbrainsMono.variable} ${playfair.variable} ${spaceMono.variable} ${ibmPlexSans.variable} ${ibmPlexMono.variable}`}>
       <body className="flex flex-col min-h-screen bg-background text-text selection:bg-primary/20 font-sans">
+        {/* 
+          TODO: Analytics (Plausible/Umami)
+          <script defer data-domain="codrag.io" src="https://plausible.io/js/script.js"></script>
+        */}
         <ClientLayout>{children}</ClientLayout>
       </body>
     </html>

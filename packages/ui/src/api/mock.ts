@@ -249,6 +249,14 @@ export class MockApiClient implements ApiClient {
     return { status: 'ready', loaded: true };
   }
 
+  async getLLMSlotsStatus(): Promise<any> {
+    return {
+      embedding: { configured: false, status: 'not_configured' },
+      small_model: { configured: false, status: 'not_configured' },
+      large_model: { configured: false, status: 'not_configured' },
+    };
+  }
+
   async getAugmentStatus(): Promise<any> {
     return {
       enabled: false,

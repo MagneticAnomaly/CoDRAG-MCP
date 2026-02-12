@@ -54,7 +54,7 @@ export class TracePanel {
 
     panel.webview.html = getWebviewHtml(panel.webview, extensionUri);
 
-    TracePanel.currentPanel = new TracePanel(panel);
+    TracePanel.currentPanel = new TracePanel(panel, extensionUri);
     TracePanel.currentPanel.update(data);
     
     return TracePanel.currentPanel;

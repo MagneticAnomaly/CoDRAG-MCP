@@ -68,7 +68,7 @@ export interface GridLayoutItem {
  * Default layout configuration
  */
 export const DEFAULT_LAYOUT: DashboardLayout = {
-  version: 11,
+  version: 14,
   panels: [
     {
       id: "status",
@@ -179,12 +179,30 @@ export const DEFAULT_LAYOUT: DashboardLayout = {
       w: 4
     },
     {
+      id: "trace-pipeline",
+      visible: true,
+      height: 5,
+      collapsed: false,
+      x: 8,
+      y: 30,
+      w: 4
+    },
+    {
+      id: "deep-analysis",
+      visible: true,
+      height: 12,
+      collapsed: false,
+      x: 8,
+      y: 35,
+      w: 4
+    },
+    {
       id: "settings",
       visible: true,
       height: 6,
       collapsed: true,
       x: 8,
-      y: 30,
+      y: 47,
       w: 4
     },
     {

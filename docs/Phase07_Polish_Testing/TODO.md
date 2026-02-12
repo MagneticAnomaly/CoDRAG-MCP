@@ -13,14 +13,14 @@
 
 ## Implementation backlog (P07-I*)
 ### Error taxonomy + actionable messaging
-- [ ] P07-I1 Finalize stable `error.code` taxonomy across daemon/UI/MCP
-- [ ] P07-I2 Ensure errors always provide recommended `hint`
+- [x] P07-I1 Finalize stable `error.code` taxonomy across daemon/UI/MCP ✅ **DONE: `docs/ERROR_CODES.md`**
+- [x] P07-I2 Ensure errors always provide recommended `hint` ✅ **DONE: `ApiException` in `server.py` uses hints**
 - [ ] P07-I3 Redaction rules for future remote mode (paths/logs/diagnostics)
 
 ### Recovery behaviors
 - [ ] P07-I4 Interrupted build detection → “recovery needed” state
 - [ ] P07-I5 Corruption detection (manifest/documents inconsistency) → hard fail with “Full rebuild” remediation
-- [ ] P07-I6 Disk pressure detection → fail early with `DISK_FULL`/`INSUFFICIENT_SPACE`
+- [x] P07-I6 Disk pressure detection → fail early with `DISK_FULL`/`INSUFFICIENT_SPACE` ✅ **DONE: `CodeIndex.build` checks 500MB free**
 
 ### Cross-cutting gaps already identified
 - [x] Resolve envelope helper duplication ✅

@@ -100,6 +100,9 @@ def ollama_model_exists(url: str, model: str) -> bool:
     """Check whether *model* is downloaded on the Ollama host.
 
     Uses ``POST /api/show`` which returns 200 if the model exists.
+    Falls back to scanning ``GET /api/tags`` if ``/api/show`` fails
+    (some models like ministral have broken templates that cause
+    ``/api/show`` to return 500 even though the model is installed).
     """
     try:
         r = requests.post(
@@ -107,9 +110,23 @@ def ollama_model_exists(url: str, model: str) -> bool:
             json={"name": model},
             timeout=_QUICK_TIMEOUT,
         )
-        return r.status_code == 200
+        if r.status_code == 200:
+            return True
     except Exception:
-        return False
+        pass
+
+    # Fallback: scan /api/tags which lists all downloaded models
+    try:
+        r = requests.get(f"{url}/api/tags", timeout=_QUICK_TIMEOUT)
+        if r.status_code == 200:
+            for m in r.json().get("models", []):
+                name = m.get("name", "")
+                if _names_match(name, model):
+                    return True
+    except Exception:
+        pass
+
+    return False
 
 
 def ollama_model_loaded(url: str, model: str) -> bool:

@@ -87,6 +87,22 @@ export default defineConfig({
           });
         },
       },
+      '/global': {
+        target: 'http://127.0.0.1:8400',
+        changeOrigin: true,
+        secure: false,
+        configure: (proxy, _options) => {
+          proxy.on('error', (err, _req, _res) => {
+            console.log('[Vite Proxy] Error:', err);
+          });
+          proxy.on('proxyReq', (proxyReq, req, _res) => {
+            console.log('[Vite Proxy] Request:', req.method, req.url);
+          });
+          proxy.on('proxyRes', (proxyRes, req, _res) => {
+            console.log('[Vite Proxy] Response:', proxyRes.statusCode, req.url);
+          });
+        },
+      },
       '/events': {
         target: 'http://127.0.0.1:8400',
         changeOrigin: true,

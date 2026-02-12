@@ -27,6 +27,7 @@ from .ids import stable_file_hash, stable_file_node_id
 from .manifest import ManifestBuildStats, build_manifest, write_manifest
 from .repo_policy import ensure_repo_policy
 from .repo_profile import DEFAULT_ROLE_WEIGHTS, classify_rel_path
+from codrag.api.envelope import ApiException
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +104,8 @@ class CodeIndex:
         """Check if an index is loaded and ready for search."""
         return bool(self._documents) and self._embeddings is not None
 
+    _DOC_EXTS = frozenset((".md", ".markdown", ".txt", ".rst", ".adoc"))
+
     def stats(self) -> Dict[str, Any]:
         """Get index statistics."""
         if not self.is_loaded():
@@ -110,6 +113,22 @@ class CodeIndex:
                 "loaded": False,
                 "index_dir": str(self.index_dir),
             }
+
+        build = dict(self._manifest.get("build", {}))
+
+        # Backfill chunks_code/chunks_docs if missing (old manifests)
+        if "chunks_code" not in build or "chunks_docs" not in build:
+            chunks_code = 0
+            chunks_docs = 0
+            for doc in (self._documents or []):
+                sp = str(doc.get("source_path") or "")
+                ext = Path(sp).suffix.lower() if sp else ""
+                if ext in self._DOC_EXTS:
+                    chunks_docs += 1
+                else:
+                    chunks_code += 1
+            build["chunks_code"] = chunks_code
+            build["chunks_docs"] = chunks_docs
 
         return {
             "loaded": True,
@@ -120,7 +139,7 @@ class CodeIndex:
             "total_documents": len(self._documents or []),
             "embedding_dim": int(self._embeddings.shape[1]) if self._embeddings is not None else 0,
             "config": self._manifest.get("config", {}),
-            "build": self._manifest.get("build", {}),
+            "build": build,
         }
 
     def build(
@@ -148,6 +167,29 @@ class CodeIndex:
         Returns:
             Build metadata
         """
+        # P07-I6: Check disk space (need ~500MB free for safety during atomic swap)
+        try:
+            # Check space on the drive containing index_dir
+            # If index_dir doesn't exist, check parent
+            check_path = self.index_dir if self.index_dir.exists() else self.index_dir.parent
+            if not check_path.exists():
+                check_path = Path.cwd()
+            
+            usage = shutil.disk_usage(check_path)
+            min_free = 500 * 1024 * 1024  # 500 MB
+            if usage.free < min_free:
+                raise ApiException(
+                    status_code=500,
+                    code="INSUFFICIENT_SPACE",
+                    message=f"Insufficient disk space to build index (free: {usage.free/1024/1024:.1f}MB, required: 500MB)",
+                    hint="Free up disk space on the drive containing the index.",
+                    details={"free_bytes": usage.free, "required_bytes": min_free, "path": str(check_path)}
+                )
+        except ApiException:
+            raise
+        except Exception as e:
+            logger.warning(f"Failed to check disk space: {e}")
+
         repo_root = Path(repo_root).resolve()
 
         policy = ensure_repo_policy(self.index_dir, repo_root)
@@ -217,10 +259,18 @@ class CodeIndex:
             if gitignore_path.exists():
                 try:
                     with open(gitignore_path, "r", encoding="utf-8") as f:
-                        gitignore_spec = pathspec.PathSpec.from_lines("gitwildmatch", f)
+                        gitignore_spec = pathspec.PathSpec.from_lines("gitignore", f)
                     logger.info("Loaded .gitignore from %s", gitignore_path)
                 except Exception as e:
                     logger.warning("Failed to parse .gitignore: %s", e)
+
+        # Build exclude pathspec for proper ** support
+        exclude_spec = None
+        if exclude_globs:
+            try:
+                exclude_spec = pathspec.PathSpec.from_lines("gitignore", exclude_globs)
+            except Exception as e:
+                logger.warning("Failed to parse exclude globs: %s", e)
 
         selected_roots: Optional[List[str]] = None
         if roots:
@@ -255,7 +305,7 @@ class CodeIndex:
                 rel_path = str(f.relative_to(repo_root))
             except ValueError:
                 continue
-            if any(Path(rel_path).match(pat) for pat in exclude_globs):
+            if exclude_spec and exclude_spec.match_file(rel_path):
                 continue
             
             # Check gitignore

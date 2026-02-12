@@ -69,6 +69,7 @@ export function ClientLayout({ children }: { children: ReactNode }) {
         productName="CoDRAG"
         sections={footerSections}
         socials={{
+          twitter: 'https://twitter.com/codrag_io',
           github: 'https://github.com/EricBintner/CoDRAG',
           email: 'hello@codrag.io'
         }}

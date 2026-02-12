@@ -101,16 +101,31 @@ class TestOllamaServerReachable:
 # ---------------------------------------------------------------------------
 
 class TestOllamaModelExists:
-    def test_exists(self):
+    def test_exists_via_show(self):
         with _mock_requests_post(return_value=MagicMock(status_code=200)):
             assert ollama_model_exists("http://localhost:11434", "mistral") is True
 
     def test_not_exists(self):
-        with _mock_requests_post(return_value=MagicMock(status_code=404)):
+        """Model not found in /api/show (404) nor /api/tags."""
+        show_resp = MagicMock(status_code=404)
+        tags_resp = MagicMock(status_code=200)
+        tags_resp.json.return_value = {"models": [{"name": "other-model:latest"}]}
+        with _mock_requests_post(return_value=show_resp), \
+             _mock_requests_get(return_value=tags_resp):
             assert ollama_model_exists("http://localhost:11434", "nonexistent") is False
 
+    def test_show_500_but_exists_in_tags(self):
+        """/api/show returns 500 (e.g. ministral template bug) but model is in /api/tags."""
+        show_resp = MagicMock(status_code=500)
+        tags_resp = MagicMock(status_code=200)
+        tags_resp.json.return_value = {"models": [{"name": "ministral-3:3b"}]}
+        with _mock_requests_post(return_value=show_resp), \
+             _mock_requests_get(return_value=tags_resp):
+            assert ollama_model_exists("http://localhost:11434", "ministral-3:3b") is True
+
     def test_connection_error(self):
-        with _mock_requests_post(side_effect=ConnectionError("refused")):
+        with _mock_requests_post(side_effect=ConnectionError("refused")), \
+             _mock_requests_get(side_effect=ConnectionError("refused")):
             assert ollama_model_exists("http://localhost:11434", "mistral") is False
 
 

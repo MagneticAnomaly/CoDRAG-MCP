@@ -32,7 +32,7 @@ This file orchestrates work across phases by:
 - Phase01: `Phase01_Foundation/TODO.md`
 - Phase02: `Phase02_Dashboard/TODO.md`
 - Phase03: `Phase03_AutoRebuild/TODO.md`
-- Phase04: `Phase04_TraceIndex/TODO.md` (Plan: `Phase04_TraceIndex/IMPLEMENTATION_PLAN.md`)
+- Phase04: `Phase04_TraceIndex/TODO.md`
 - Phase05: `Phase05_MCP_Integration/TODO.md`
 - Phase06: `Phase06_Team_And_Enterprise/TODO.md`
 - Phase07: `Phase07_Polish_Testing/TODO.md`
@@ -42,7 +42,13 @@ This file orchestrates work across phases by:
 - Phase11: `Phase11_Deployment/TODO.md`
 - Phase12: `Phase12_Marketing-Documentation-Website/TODO.md`
 - Phase13: `Phase13_Storybook/TODO.md`
+- Phase14: `Phase14_UI_UX_Improvements/TODO.md`
+- Phase15: `Phase15_modular-design/TODO.md`
 - Phase16: `Phase16_ContextIntelligence/README.md`
+- Phase17: `Phase17_VSC-plugin/TODO.md`
+- Phase18: `Phase18_DataVisualization/README.md`
+- Phase19: `Phase19_Alt-Dev-Workflows/TODO.md`
+- Phase20: `Phase20_support_strategy/TODO.md`
 
 ## Dependency anchors (planning)
 - **Canonical dependency doc:** `PHASE_DEPENDENCIES.md`
@@ -65,18 +71,19 @@ These sprints are intentionally cross-phase. Each sprint should end with:
 ### Sprint S-00: Research closure for MVP-critical phases (01–05)
 **Goal:** unblock implementation by closing the highest-leverage research gaps.
 
-- [x] S-00.1 Close Phase01 research blockers (manifest schema, stable IDs, recovery model) ✅
+- [x] S-00.1 Close Phase01 research blockers (manifest schema, stable IDs, recovery model) 
   - Manifest schema: defined with version, file_hashes, build stats, config
   - Stable IDs: `ids.py` with sha256-based chunk/file/node IDs
   - Recovery: atomic build swap + stale build cleanup
-- [p] S-00.2 Close Phase02 research blockers (UI IA + API shapes + error states)
+- [x] S-00.2 Close Phase02 research blockers (UI IA + API shapes + error states) 
   - API shapes: done. UI IA: largely done (modular dashboard). Error states: done (ErrorState component + ApiException).
-  - Remaining: formal error code taxonomy documentation
-- [x] S-00.3 Close Phase03 research blockers (watch strategy, debounce/throttle defaults) ✅
+  - Completed via S-02 (Dashboard) and S-15 (Modular Design).
+- [x] S-00.3 Close Phase03 research blockers (watch strategy, debounce/throttle defaults) 
   - Watcher: chokidar via subprocess, debounce 5s default, throttle, watcher state machine
-- [x] S-00.4 Close Phase04 research blockers (node/edge schema, analyzer MVP) ✅
+- [x] S-00.4 Close Phase04 research blockers (node/edge schema, analyzer MVP) 
   - Schema: file/symbol/external_module nodes, contains/imports/calls edges
   - Analyzer: Rust engine with 8 language parsers
+- [x] S-00.5 Close Phase05 research blockers (tool schemas, selection rules, budgets) 
 - [x] S-00.5 Close Phase05 research blockers (tool schemas, selection rules, budgets) ✅
   - 4 tools: codrag_status, codrag_build, codrag_search, codrag_context
   - Budgets: k/max_chars/min_score caps in server.py
@@ -152,14 +159,38 @@ These sprints are intentionally cross-phase. Each sprint should end with:
 ### Sprint S-08: Public docs + design system alignment
 **Goal:** credible public-facing docs, consistent UI primitives across app + site.
 
-- [ ] S-08.1 Getting started + MCP onboarding docs scaffold (Phase12/05)
-- [ ] S-08.2 Visual direction prototypes + token strategy + Storybook baseline (Phase13/02/12)
+- [x] S-08.1 Getting started + MCP onboarding docs scaffold (Phase12/05)
+  - `docs/GETTING_STARTED.md`, `docs/MCP_ONBOARDING.md`, `docs/TROUBLESHOOTING.md`
+  - `/guides/*` pages on docs site (embeddings, clara, path weights)
+- [x] S-08.2 Visual direction prototypes + token strategy + Storybook baseline (Phase13/02/12)
+  - All "Radical" visual directions (Neo-Brutalist, Retro, Glass, etc.) ported to `@codrag/ui`
+  - Storybook reorganized (`Dashboard/Widgets`, `Dashboard/Layouts`, `Foundations`)
+  - Shared `Button` and `Select` primitives standardized across app + site
 
 ### Sprint S-09: Team/enterprise feedback loop (design constraints, post-MVP implementation)
 **Goal:** keep enterprise constraints influencing earlier phases without shipping risky surfaces in MVP.
 
 - [ ] S-09.1 Embedded mode + network-mode safety baselines (Phase06)
 - [ ] S-09.2 Policy/config provenance UX implications (Phase06/02)
+
+### Sprint S-14: Comprehensive QA & Polish (Phase 07)
+**Goal:** MVP quality bar — rigorous testing, error handling, and operational visibility.
+
+- [ ] S-14.1 Test harness expansion (integration tests, failure injection, gold queries)
+- [x] S-14.2 Error taxonomy refinement & actionable messaging (Phase07/02) ✅ **DONE: `docs/ERROR_CODES.md` + `ApiException`**
+- [ ] S-14.3 Recovery behaviors (interrupted build, corruption, disk pressure)
+  - [x] Disk pressure detection (`INSUFFICIENT_SPACE`)
+- [ ] S-14.4 Performance benchmarks & optimization
+
+### Sprint S-17: VS Code Extension MVP (Phase 17)
+**Goal:** Native VS Code experience powered by the CoDRAG daemon.
+
+- [x] S-17.1 Daemon management & connectivity (auto-start, polling, health checks)
+- [x] S-17.2 WebViews Integration (React + Vite + Tailwind pipeline)
+  - Search, Context, Trace panels
+- [x] S-17.3 Core Commands & Tree Views
+  - Project/File management, Index Status, Licensing commands
+- [ ] S-17.4 Post-MVP polish (high-res icons, pin file command, chat provider)
 
 ### Sprint S-12: Context MVC Verification (Phase 19)
 **Goal:** Verify and document "Verified Views" (Gemini CLI, Qwen Code) to enable BYO-View architecture.
@@ -172,19 +203,55 @@ These sprints are intentionally cross-phase. Each sprint should end with:
 **Goal:** Real-time visibility into background processes (indexing, trace building) via Log Console and granular Progress Bars.
 
 - [ ] S-13.1 Backend Event Bus (SSE) & Log Capture (Phase02)
-  - `GET /events` SSE endpoint in `server.py`
-  - `BroadcastLogHandler` for capturing root logs to asyncio queue
-  - `ProgressManager` singleton for tracking task % completion
 - [ ] S-13.2 Progress Callback Wiring (Phase01/04)
-  - Wire `CodeIndex.build(progress_callback=...)` to ProgressManager
-  - Wire `TraceBuilder.build(progress_callback=...)` to ProgressManager
 - [ ] S-13.3 Frontend Log Console & Progress Components (Phase02)
-  - `LogConsole` component (terminal style, filters, auto-scroll)
-  - `ProgressIndicator` component (slim bar, animated)
-  - `useEventStream` hook in `@codrag/ui`
 - [ ] S-13.4 Dashboard Integration (Phase02)
-  - Add Log Console to main layout (collapsible)
-  - Integrate Progress Bars into `IndexStatusCard` and `TraceStatusCard`
+
+### Sprint S-15: Monetization & Distribution Plumbing (Phase 11)
+**Goal:** End-to-end licensing flow, payments recovery, and secure update channels.
+
+- [ ] S-15.1 License Activation Exchange (api.codrag.io relay + Ed25519 verification)
+- [ ] S-15.2 Payments Recovery (Lemon Squeezy order lookup integration)
+- [ ] S-15.3 Signed Distribution Pipeline (Mac/Windows signing, auto-update)
+
+### Sprint S-16: MCP Maturity & Ecosystem (Phase 05)
+**Goal:** Complete the MCP story for remote/team usage and registry publication.
+
+- [x] S-16.1 Streamable HTTP Transport (P05-R5) - for remote/enterprise usage
+  - Implemented in `src/codrag/mcp_server.py` (`run_http`, `/sse`, `/message`)
+- [ ] S-16.2 Async Tasks for long-running builds (P05-R7)
+- [ ] S-16.3 PyPI Package Verification for MCP Registry (P05-I19)
+- [ ] S-16.4 Tool Icons & Metadata Polish (P05-R9)
+
+### Sprint S-18: Data Visualization (Phase 18)
+**Goal:** Make invisible index activity visible and beautiful via CLI and Dashboard.
+
+- [ ] S-18.1 CLI Visualizations (Activity Heatmap, Index Health, Build Sparkline)
+- [ ] S-18.2 Dashboard Viz Panels (Activity, Health, Token Budget)
+- [ ] S-18.3 Index Drift & RAG Flow visualization tools
+
+### Sprint S-19: Lean Support Strategy (Phase 20)
+**Goal:** Consolidate support channels to GitHub Discussions + single email.
+
+- [ ] S-19.1 Update Marketing `/contact` page (Community vs Private split)
+- [ ] S-19.2 Retire standalone Support App (websites/apps/support)
+- [ ] S-19.3 Update global navigation support links
+
+### Sprint S-20: Modular Dashboard (Phase 15)
+**Goal:** Grid-based, draggable, persistent dashboard layout system.
+
+- [x] S-20.1 Core Layout Engine (`DashboardGrid`, `PanelChrome`, `useLayoutPersistence`)
+- [x] S-20.2 Panel Registry & Component Extraction
+- [x] S-20.3 Panel Picker & Layout Controls
+- [ ] S-20.4 Storybook Documentation (Sprint 7) & DoD Checklist
+
+### Sprint S-21: UI/UX Improvements (Phase 14)
+**Goal:** Polish visual consistency, form layouts, and spacing across the dashboard.
+
+- [x] S-21.1 Form UI Updates (BuildCard, SearchPanel, ContextOptions spacing)
+- [x] S-21.2 Standardized Loaders & Icons
+- [x] S-21.3 Trace Status Card consistency
+- [x] S-21.4 Documentation (`Form_UI_Updates.md`)
 
 ### Sprint S-11: Frontend-Backend Integration + Tier Enforcement
 **Goal:** Wire auto-rebuild ↔ auto-trace, enforce paid/free tiers, connect Rust engine info to frontend.
@@ -950,7 +1017,31 @@ All URLs updated to `github.com/EricBintner/CoDRAG`:
  | **P3** | Phase 17 | ~45 | Open | VS Code extension (future) |
  | **P3** | Website builds | 1 | Open | `@codrag/ui` resolution (build order) |
 
- ### 2026-02-09: Deep Audit — Round 3
+ ### 2026-02-12: Master TODO Audit & Expansion
+
+**What changed:**
+- **Audit completed:** Verified status of Phase 14 (UI/UX), Phase 15 (Modular Dashboard), Phase 17 (VS Code), and Phase 18 (Data Viz).
+- **New Sprints defined:** Added S-14 through S-21 to explicitly track work that was previously implicit or buried in phase docs.
+  - S-14: QA & Polish (Phase 07)
+  - S-15: Monetization Plumbing (Phase 11)
+  - S-16: MCP Maturity (Phase 05)
+  - S-17: VS Code MVP (Phase 17)
+  - S-18: Data Visualization (Phase 18)
+  - S-19: Support Strategy (Phase 20)
+  - S-20: Modular Dashboard (Phase 15)
+  - S-21: UI/UX Improvements (Phase 14)
+- **Completed items marked:**
+  - S-08 (Public Docs / Design System) marked complete.
+  - S-00.2 (Phase 02 Research) marked complete.
+  - S-20 (Modular Dashboard) implementation marked complete (docs pending).
+  - S-21 (UI/UX) marked complete.
+  - S-17 (VS Code) implementation marked complete (polish pending).
+
+**Priorities updated:**
+- **Immediate:** Close S-20.4 (Storybook docs) and S-17.4 (VS Code polish).
+- **Next:** S-15 (Monetization) and S-14 (QA/Polish) are critical for release.
+
+### 2026-02-09: Deep Audit — Round 3
 
  #### Items Closed (verified as fixed)
 

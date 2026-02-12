@@ -2,22 +2,31 @@
 
 ## Reporting a Vulnerability
 
-Please do not file public GitHub issues for security vulnerabilities.
+We take the security of CoDRAG seriously. If you discover a security vulnerability, please report it to us immediately.
 
-Report security issues by email:
-- `security@codrag.io`
+**Do NOT file public GitHub issues for security vulnerabilities.**
 
-Include:
-- a description of the issue
-- steps to reproduce
-- affected version(s)
-- any proof-of-concept code (if available)
+### Contact
+Please email **security@codrag.io** with a description of the issue, steps to reproduce, and any proof-of-concept code.
 
-We will:
-- acknowledge receipt
-- assess impact and scope
-- coordinate a fix and disclosure timeline
+### Response Timeline
+- **Acknowledgment**: We will acknowledge receipt of your report within 24 hours.
+- **Assessment**: We will assess the impact and severity within 3 business days.
+- **Resolution**: We aim to release a fix for critical vulnerabilities within 7 days.
 
 ## Supported Versions
 
-Security fixes are provided for the latest released version.
+We provide security updates for the **latest major release** of the CoDRAG Desktop Application and the CoDRAG MCP Server.
+
+| Version | Supported | Notes |
+| :--- | :--- | :--- |
+| Latest Release | ✅ | Always upgrade to the latest version for security fixes. |
+| < Latest | ❌ | Older versions are not actively patched. |
+
+## Integrity Verification
+
+All official releases of CoDRAG are signed.
+- **macOS**: Signed with our Apple Developer ID and notarized by Apple.
+- **Windows**: Signed with our EV Code Signing Certificate.
+
+Do not run CoDRAG binaries that fail signature verification or originate from untrusted sources.

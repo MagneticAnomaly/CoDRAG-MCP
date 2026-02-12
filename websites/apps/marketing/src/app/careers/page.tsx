@@ -107,6 +107,12 @@ export default function Page() {
             <span className="font-mono text-sm">{OPEN_POSITIONS.length} ROLES AVAILABLE</span>
           </div>
 
+          <div className="mb-12 p-4 border border-text bg-surface-muted">
+            <p className="font-mono text-sm text-text-muted">
+              <strong>NOTE:</strong> We are not actively hiring at this exact moment, but we are always interested in connecting with exceptional engineers for future roles. Feel free to reach out.
+            </p>
+          </div>
+
           {departments.map((dept) => (
             <div key={dept} className="mb-16">
               <h3 className="font-mono text-sm uppercase tracking-widest text-text-muted mb-6">{dept}</h3>

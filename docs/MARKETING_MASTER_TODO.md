@@ -44,6 +44,7 @@ This file tracks **public-facing website work** (marketing/docs/support/payments
   - [x] SEO basics (sitemap/robots/metadata created).
   - [x] Link validation (CI workflow).
   - [ ] Cloudflare DNS + redirects.
+  - [ ] Analytics integration (Plausible/Umami).
 
 ## Workstreams
 
@@ -84,6 +85,7 @@ This file tracks **public-facing website work** (marketing/docs/support/payments
 ### MKT-W4: Support site (`websites/apps/support`) support.codrag.io (`support@codrag.io`)
 - [x] Support Hub: Troubleshooting, Bug Report, Q&A, Billing, Email, Security cards.
 - [x] Wired to `support.codrag.io` in Vercel config.
+- [x] "Headless GitHub" integration for Discussions/Issues.
 
 ### MKT-W5: Payments site (`websites/apps/payments`) payments.codrag.io
 - [x] Wire `NEXT_PUBLIC_CODRAG_CHECKOUT_URL` and document local `.env` usage.
@@ -93,7 +95,7 @@ This file tracks **public-facing website work** (marketing/docs/support/payments
 ### MKT-W6: Deploy + DNS
 - [x] Create GitHub Actions workflow (`.github/workflows/websites-ci.yml`) for lint, build, and link validation.
 - [x] Choose deploy provider (Vercel selected) + configure 4 projects.
-  - Created `vercel.json` for marketing, docs, support, payments.
+  - [x] Created `vercel.json` for marketing, docs, support, payments.
 - [ ] Cloudflare DNS records + redirects (www + legacy domain).
 - [ ] Preview deployments enabled for PRs (Ready for Vercel connection).
 
@@ -102,12 +104,18 @@ This file tracks **public-facing website work** (marketing/docs/support/payments
 - [ ] Lighthouse pass (perf/a11y/SEO) for marketing home.
 - [ ] Manual QA: Chrome/Safari/Firefox.
 
+### MKT-W9: Final Polish & Ops (Pre-Launch)
+- [x] **Analytics**: Add privacy-respecting script (Plausible/Umami) to `layout.tsx`. (Added placeholders)
+- [x] **Socials**: Update SiteFooter with real Twitter/X and GitHub URLs.
+- [x] **Careers**: Add "Not actively hiring" disclaimer (optional).
+- [ ] **Legal**: External legal review of Privacy/Terms.
+- [ ] **Email**: Configure `support@codrag.io` and `hello@codrag.io` catch-alls.
+
 ### MKT-W8: Later (post-v0 / 2.0)
 - [ ] **Support 2.0**: Full Helpdesk.
   - [ ] Auth / Ticketing system.
   - [ ] Secure file uploads for debug traces.
-- [ ] `/changelog`
-- [ ] `/blog`
+- [ ] **Blog 2.0**: Migrate from JSON/TS to MDX (`@next/mdx`).
 - [ ] `/workflows/*` case studies
 - [ ] Public vs private Storybook decision + hosting if public
 - [ ] Interactive dashboard demo (separate demo app; mock-only)

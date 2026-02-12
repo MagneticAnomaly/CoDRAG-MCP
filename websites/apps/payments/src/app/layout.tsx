@@ -7,6 +7,7 @@ import './globals.css';
 import { ClientLayout } from './ClientLayout';
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://payments.codrag.io'),
   title: 'CoDRAG Payments',
   description: 'Purchase and manage CoDRAG licenses.',
 };
@@ -15,6 +16,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" data-codrag-theme="k">
       <body className="flex flex-col min-h-screen bg-background text-text selection:bg-primary/20">
+        {/* 
+          TODO: Analytics (Plausible/Umami)
+          <script defer data-domain="payments.codrag.io" src="https://plausible.io/js/script.js"></script>
+        */}
         <ClientLayout>{children}</ClientLayout>
       </body>
     </html>

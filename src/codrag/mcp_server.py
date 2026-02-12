@@ -31,6 +31,7 @@ import httpx
 try:
     from fastapi import FastAPI, Request, Response
     from fastapi.responses import StreamingResponse
+    from fastapi.middleware.base import BaseHTTPMiddleware
     import uvicorn
 except ImportError:
     FastAPI = None
@@ -791,6 +792,28 @@ async def run_stdio(server: MCPServer) -> None:
         await server.close()
 
 
+class TrustedOriginMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app, allowed_origins: List[str]):
+        super().__init__(app)
+        self.allowed_origins = allowed_origins
+
+    async def dispatch(self, request: Request, call_next):
+        origin = request.headers.get("origin")
+        # If origin is present, it must be in allowed list
+        # If no origin (e.g. curl/native apps), we allow it (assuming local binding protection)
+        # Note: Browsers ALWAYS send Origin for CORS requests (like SSE)
+        if origin:
+            # Simple exact match check
+            # For robust production use, this might need wildcard support
+            if origin not in self.allowed_origins:
+                # Check for localhost/loopback variations if configured
+                is_local = origin.startswith("http://localhost") or origin.startswith("http://127.0.0.1")
+                if not is_local:
+                    return Response(status_code=403, content="Forbidden: Origin not allowed")
+        
+        return await call_next(request)
+
+
 async def run_http(
     daemon_url: str,
     project_id: Optional[str],
@@ -804,6 +827,19 @@ async def run_http(
         sys.exit(1)
 
     app = FastAPI()
+    
+    # P05-R6: Implement Origin validation
+    # By default, allow localhost origins since this is a local tool
+    # In a future remote deployment, this should be configurable
+    app.add_middleware(
+        TrustedOriginMiddleware, 
+        allowed_origins=[
+            f"http://{host}:{port}",
+            f"http://127.0.0.1:{port}",
+            f"http://localhost:{port}",
+            "null"  # Some local tools send null origin
+        ]
+    )
     
     # Session state: sessionId -> {"queue": asyncio.Queue, "server": MCPServer}
     sessions: Dict[str, Dict[str, Any]] = {}

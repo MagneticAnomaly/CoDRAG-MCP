@@ -35,6 +35,8 @@ export type {
   DeepAnalysisRunStatus,
   TraceAugmentation,
   AugmentationStatus,
+  LLMSlotStatus,
+  LLMSlotsStatus,
 } from './types';
 
 // Components - Status
@@ -85,8 +87,8 @@ export { WatchStatusIndicator, WatchControlPanel } from './components/watch';
 export type { WatchStatusIndicatorProps, WatchControlPanelProps } from './components/watch';
 
 // Components - Trace (Phase 04)
-export { TraceStatusCard, TraceExplorer, TraceCoveragePanel } from './components/trace';
-export type { TraceStatusCardProps, TraceExplorerProps, TraceCoveragePanelProps } from './components/trace';
+export { TraceStatusCard, TraceExplorer, TraceCoveragePanel, TracePipelineStatus } from './components/trace';
+export type { TraceStatusCardProps, TraceExplorerProps, TraceCoveragePanelProps, TracePipelineStatusProps, TraceStageInfo } from './components/trace';
 
 // Components - Layout (Modular Dashboard - Phase 15)
 export { PanelChrome, DashboardGrid, PanelPicker, ModularDashboard, useLayoutPersistence } from './components/layout';

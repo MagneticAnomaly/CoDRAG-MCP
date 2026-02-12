@@ -102,9 +102,18 @@ class LLMClient:
     Wraps Ollama-compatible /api/generate endpoint.
     """
 
-    def __init__(self, endpoint_url: str, model: str, timeout: float = 30.0):
+    def __init__(
+        self,
+        endpoint_url: str,
+        model: str,
+        provider: str = "ollama",
+        api_key: Optional[str] = None,
+        timeout: float = 60.0
+    ):
         self.endpoint_url = endpoint_url.rstrip("/")
         self.model = model
+        self.provider = provider
+        self.api_key = api_key
         self.timeout = timeout
 
     def generate(self, prompt: str, system: Optional[str] = None) -> Tuple[str, int]:
@@ -114,29 +123,77 @@ class LLMClient:
         """
         import requests
 
-        payload: Dict[str, Any] = {
-            "model": self.model,
-            "prompt": prompt,
-            "stream": False,
-            "options": {"temperature": 0.1, "num_predict": 512},
-        }
-        if system:
-            payload["system"] = system
+        if self.provider == "ollama":
+            payload: Dict[str, Any] = {
+                "model": self.model,
+                "prompt": prompt,
+                "stream": False,
+                "format": "json",
+                "options": {"temperature": 0.1, "num_predict": 512},
+            }
+            if system:
+                payload["system"] = system
 
-        url = f"{self.endpoint_url}/api/generate"
-        resp = requests.post(url, json=payload, timeout=self.timeout)
-        resp.raise_for_status()
-        data = resp.json()
-        text = data.get("response", "")
-        tokens = data.get("eval_count", 0) + data.get("prompt_eval_count", 0)
-        return text, tokens
+            url = f"{self.endpoint_url}/api/generate"
+            resp = requests.post(url, json=payload, timeout=self.timeout)
+            resp.raise_for_status()
+            data = resp.json()
+            text = data.get("response", "")
+            tokens = data.get("eval_count", 0) + data.get("prompt_eval_count", 0)
+            return text, tokens
+
+        elif self.provider in ("openai", "openai-compatible"):
+            messages = []
+            if system:
+                messages.append({"role": "system", "content": system})
+            messages.append({"role": "user", "content": prompt})
+
+            payload = {
+                "model": self.model,
+                "messages": messages,
+                "temperature": 0.1,
+                # "response_format": {"type": "json_object"}, # Not all OpenAI-compat models support this, so rely on prompt
+            }
+            
+            headers = {
+                "Content-Type": "application/json",
+            }
+            if self.api_key:
+                headers["Authorization"] = f"Bearer {self.api_key}"
+
+            # Assume endpoint_url is base URL (e.g. https://api.openai.com/v1)
+            # Some users might put /chat/completions in the URL, try to handle gracefully?
+            # Standard convention: endpoint_url is base, we append /chat/completions
+            url = f"{self.endpoint_url}/chat/completions"
+            
+            resp = requests.post(url, json=payload, headers=headers, timeout=self.timeout)
+            resp.raise_for_status()
+            data = resp.json()
+            
+            choice = data.get("choices", [{}])[0]
+            text = choice.get("message", {}).get("content", "")
+            usage = data.get("usage", {})
+            tokens = usage.get("total_tokens", 0)
+            return text, tokens
+        
+        else:
+            raise ValueError(f"Unsupported LLM provider: {self.provider}")
 
     def is_available(self) -> bool:
         """Check if the endpoint is reachable."""
         import requests
         try:
-            resp = requests.get(f"{self.endpoint_url}/api/tags", timeout=5)
-            return resp.status_code == 200
+            if self.provider == "ollama":
+                resp = requests.get(f"{self.endpoint_url}/api/tags", timeout=5)
+                return resp.status_code == 200
+            elif self.provider in ("openai", "openai-compatible"):
+                headers = {}
+                if self.api_key:
+                    headers["Authorization"] = f"Bearer {self.api_key}"
+                # Try listing models
+                resp = requests.get(f"{self.endpoint_url}/models", headers=headers, timeout=5)
+                return resp.status_code == 200
+            return False
         except Exception:
             return False
 
@@ -398,7 +455,7 @@ class TraceAugmenter:
 
         parsed = _parse_json_response(text)
         if not parsed:
-            logger.warning("Failed to parse LLM response for %s", node.get("name"))
+            logger.warning("Failed to parse LLM response for %s — raw: %.200s", node.get("name"), text)
             return None
 
         role = parsed.get("role", "internal")
@@ -418,6 +475,27 @@ class TraceAugmenter:
             file_hash=file_hashes.get(file_path),
         )
 
+    # Paths containing these segments are build output / not worth augmenting
+    _SKIP_PATH_SEGMENTS = frozenset({
+        "node_modules", ".next", "out/_next", "dist/", "build/",
+        "__pycache__", ".tox", ".eggs", "vendor/bundle",
+    })
+
+    def _should_skip_file(self, file_path: str) -> bool:
+        """Return True if this file is likely build output or minified."""
+        fp_lower = file_path.lower()
+        for seg in self._SKIP_PATH_SEGMENTS:
+            if seg in fp_lower:
+                return True
+        # Skip minified JS/CSS (very long lines, no useful structure)
+        if fp_lower.endswith((".min.js", ".min.css")):
+            return True
+        # Heuristic: filenames with content hashes (e.g. chunk-abc123.js)
+        base = os.path.basename(fp_lower)
+        if base.count("-") >= 1 and base.endswith(".js") and len(base) > 20:
+            return True
+        return False
+
     def augment_file(
         self,
         node: Dict[str, Any],
@@ -427,6 +505,9 @@ class TraceAugmenter:
     ) -> Optional[AugmentationEntry]:
         """Augment a file node with LLM role classification."""
         file_path = node.get("file_path", "")
+        if self._should_skip_file(file_path):
+            logger.debug("Skipping build output file: %s", file_path)
+            return None
         head = self._get_file_head(file_path)
         if not head:
             return None
@@ -456,7 +537,7 @@ class TraceAugmenter:
 
         parsed = _parse_json_response(text)
         if not parsed:
-            logger.warning("Failed to parse LLM response for file %s", file_path)
+            logger.warning("Failed to parse LLM response for file %s — raw: %.200s", file_path, text)
             return None
 
         role = parsed.get("role", "utility")

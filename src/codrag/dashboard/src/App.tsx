@@ -22,6 +22,7 @@ import {
   AIModelsSettings,
   DeepAnalysisSettings,
   type DeepAnalysisSchedule,
+  type DeepAnalysisRunStatus,
   CopyButton,
   // Project
   AddProjectModal,
@@ -30,6 +31,9 @@ import {
   // Trace
   TraceExplorer,
   TraceCoveragePanel,
+  TracePipelineStatus,
+  type AugmentationStatus,
+  type LLMSlotsStatus,
   type PinnedTextFile,
   // Watch
   WatchControlPanel,
@@ -100,6 +104,19 @@ function deriveStatus(ps: ProjectStatus | null, building: boolean): StatusState 
   if (ps.stale) return 'stale'
   if (ps.index.exists) return 'fresh'
   return 'pending'
+}
+
+/** Recursively collect paths of files that are indexed or pending in the tree. */
+function collectIndexedPaths(nodes: TreeNode[], prefix = ''): string[] {
+  const result: string[] = []
+  for (const node of nodes) {
+    const p = prefix ? `${prefix}/${node.name}` : node.name
+    if (node.type === 'file' && (node.status === 'indexed' || node.status === 'pending')) {
+      result.push(p)
+    }
+    if (node.children) result.push(...collectIndexedPaths(node.children, p))
+  }
+  return result
 }
 
 function toProjectSummary(p: ProjectListItem, ps: ProjectStatus | null, building: boolean): ProjectSummary {
@@ -358,7 +375,9 @@ function App() {
     localStorage.getItem('codrag_ui_theme') ?? 'none'
   )
   const [devSettingsOpen, setDevSettingsOpen] = useState(false)
-  const [bgImage, setBgImage] = useState<string | null>(null)
+  const [bgImage, setBgImage] = useState<string | null>(() =>
+    localStorage.getItem('codrag_bg_image') ?? null
+  )
   const [dashboardLayout, setDashboardLayout] = useState<DashboardLayout | null>(null)
 
   // ── Search state ───────────────────────────────────────────
@@ -432,11 +451,14 @@ function App() {
     budget_max_items: 100,
     priority: 'lowest_confidence',
   })
-  const [deepAnalysisStatus, setDeepAnalysisStatus] = useState<{
-    last_run_at?: string; last_run_items?: number; last_run_tokens?: number;
-    next_run_at?: string; queue_size?: number; avg_confidence?: number; running?: boolean;
-  }>({})
+  const [deepAnalysisStatus, setDeepAnalysisStatus] = useState<DeepAnalysisRunStatus>({})
   const [deepAnalysisRunning, setDeepAnalysisRunning] = useState(false)
+  const [augmentationStatus, setAugmentationStatus] = useState<AugmentationStatus>({
+    enabled: false, total_nodes: 0, augmented_nodes: 0, validated_nodes: 0,
+    avg_confidence: 0, low_confidence_count: 0,
+  })
+  const [augmenting, setAugmenting] = useState(false)
+  const [llmSlotsStatus, setLlmSlotsStatus] = useState<LLMSlotsStatus | null>(null)
 
   // ── Trace state ───────────────────────────────────────────
   const [traceStatus, setTraceStatus] = useState<{ enabled: boolean; exists: boolean; building: boolean; counts: { nodes: number; edges: number } }>({
@@ -710,9 +732,29 @@ function App() {
 
   const handleTestModel = useCallback(async (slotType: 'embedding' | 'small' | 'large' | 'clara') => {
     if (slotType === 'clara') {
-      const res: EndpointTestResult = { success: false, message: 'CLaRa test not yet implemented.' }
-      setTestResults((prev) => ({ ...prev, clara: res }))
-      return res
+      // Resolve CLaRa URL: saved endpoint, remote_url, or default
+      let claraUrl = 'http://localhost:8765'
+      if (llmConfig.clara.endpoint_id) {
+        const ep = llmConfig.saved_endpoints.find((e) => e.id === llmConfig.clara.endpoint_id)
+        if (ep) claraUrl = ep.url
+      } else if (llmConfig.clara.remote_url) {
+        claraUrl = llmConfig.clara.remote_url
+      }
+      setTestingSlot('clara')
+      try {
+        const r = await fetch('/api/llm/proxy/test-model', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider: 'clara', url: claraUrl, model: 'clara', kind: 'completion' }),
+        })
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        const json = await r.json()
+        const data = (json?.data ?? json) as EndpointTestResult
+        setTestResults((prev) => ({ ...prev, clara: data }))
+        return data
+      } finally {
+        setTestingSlot(null)
+      }
     }
     let endpointId: string | undefined
     let model: string | undefined
@@ -774,6 +816,54 @@ function App() {
     if (!selectedProjectId) throw new Error("No project selected")
     return await api.detectStack(selectedProjectId)
   }, [api, selectedProjectId])
+
+  // ── LLM slots connectivity check ────────────────────────────
+
+  const fetchLLMSlotsStatus = useCallback(async () => {
+    try {
+      const status = await api.getLLMSlotsStatus()
+      setLlmSlotsStatus(status)
+    } catch {
+      // Silent — not critical
+    }
+  }, [api])
+
+  // ── Augmentation handlers ──────────────────────────────────
+
+  const fetchAugmentationStatus = useCallback(async () => {
+    if (!selectedProjectId) return
+    try {
+      const status = await api.getAugmentStatus(selectedProjectId)
+      setAugmentationStatus(status)
+    } catch {
+      // Silent — status not critical
+    }
+  }, [api, selectedProjectId])
+
+  const handleRunAugmentation = useCallback(async () => {
+    if (!selectedProjectId) return
+    setAugmenting(true)
+    try {
+      await api.runAugmentation(selectedProjectId)
+      const poll = setInterval(async () => {
+        try {
+          const status = await api.getAugmentStatus(selectedProjectId)
+          setAugmentationStatus(status)
+          // Stop polling once augmented_nodes stabilizes (no running indicator from status)
+          // We'll just poll a few times then stop
+        } catch { /* ignore */ }
+      }, 3000)
+      // Stop after 5 minutes max
+      setTimeout(() => {
+        clearInterval(poll)
+        setAugmenting(false)
+        void fetchAugmentationStatus()
+      }, 300_000)
+    } catch (e) {
+      setAugmenting(false)
+      setError(e instanceof Error ? e.message : 'Augmentation failed')
+    }
+  }, [api, selectedProjectId, fetchAugmentationStatus])
 
   // ── Deep analysis handlers ─────────────────────────────────
 
@@ -1073,7 +1163,21 @@ function App() {
     root.setAttribute('data-codrag-theme', uiTheme === 'none' ? 'a' : uiTheme)
     localStorage.setItem('codrag_ui_mode', uiMode)
     localStorage.setItem('codrag_ui_theme', uiTheme)
-  }, [uiMode, uiTheme])
+    if (bgImage) localStorage.setItem('codrag_bg_image', bgImage)
+    else localStorage.removeItem('codrag_bg_image')
+  }, [uiMode, uiTheme, bgImage])
+
+  // ── Persist UI preferences to backend ─────────────────────
+  const uiPrefsSkipRef = useRef(0)
+  useEffect(() => {
+    if (uiPrefsSkipRef.current < 2) { uiPrefsSkipRef.current++; return }
+    const timeout = setTimeout(() => {
+      api.updateGlobalConfig({
+        ui_preferences: { mode: uiMode, theme: uiTheme, bg_image: bgImage },
+      }).catch(() => {})
+    }, 500)
+    return () => clearTimeout(timeout)
+  }, [api, uiMode, uiTheme, bgImage])
 
   // ── Init: load projects + global config ─────────────────────
   useEffect(() => {
@@ -1089,9 +1193,17 @@ function App() {
           if (globalCfg.deep_analysis) {
             setDeepAnalysisSchedule((prev) => ({ ...prev, ...globalCfg.deep_analysis }))
           }
+          if (globalCfg.ui_preferences) {
+            const prefs = globalCfg.ui_preferences
+            if (prefs.mode) setUiMode(prefs.mode)
+            if (prefs.theme) setUiTheme(prefs.theme)
+            if (prefs.bg_image !== undefined) setBgImage(prefs.bg_image)
+          }
         } catch {
           // Global config not available — use defaults
         }
+        // Check LLM connectivity
+        void fetchLLMSlotsStatus()
       } catch {
         // Error already set
       } finally {
@@ -1130,6 +1242,17 @@ function App() {
     return () => clearTimeout(timeout)
   }, [api, deepAnalysisSchedule])
 
+  // ── Auto-save dashboard layout to backend ───────────────────
+  const layoutSkipRef = useRef(0)
+  useEffect(() => {
+    if (!dashboardLayout) return
+    if (layoutSkipRef.current < 2) { layoutSkipRef.current++; return }
+    const timeout = setTimeout(() => {
+      api.updateGlobalConfig({ module_layout: dashboardLayout }).catch(() => {})
+    }, 1000)
+    return () => clearTimeout(timeout)
+  }, [api, dashboardLayout])
+
   // ── Auto-fetch models for pre-configured endpoints ──────────
   useEffect(() => {
     const endpointIds = new Set<string>()
@@ -1153,10 +1276,28 @@ function App() {
     if (!selectedProjectId) return
     void refreshStatus(selectedProjectId)
     void refreshWatchStatus(selectedProjectId)
+    void fetchAugmentationStatus()
     void fetchDeepAnalysisStatus()
     // Fetch file tree
-    api.getProjectFiles(selectedProjectId, '', 4).then((data) => {
-      setFileTree(data.tree ?? [])
+    api.getProjectFiles(selectedProjectId, '', 15).then((data) => {
+      const tree = data.tree ?? []
+      setFileTree(tree)
+      // Merge server-reported indexed/pending paths into includedPaths
+      // so already-indexed files aren't shown as "Removing" after restart
+      const serverPaths = collectIndexedPaths(tree)
+      if (serverPaths.length > 0) {
+        setIncludedPaths((prev) => {
+          const next = new Set(prev)
+          let changed = false
+          for (const p of serverPaths) {
+            if (!next.has(p)) { next.add(p); changed = true }
+          }
+          if (changed) {
+            localStorage.setItem('codrag_included_paths', JSON.stringify([...next]))
+          }
+          return changed ? next : prev
+        })
+      }
     }).catch(() => { setFileTree([]) })
     // Fetch path weights
     api.getPathWeights(selectedProjectId).then((data) => {
@@ -1259,26 +1400,63 @@ function App() {
     'llm-status': (
       <div className="h-full overflow-y-auto p-4">
         <LLMStatusWidget
-          services={[
-            {
-              name: 'Embedding',
-              status: llmConfig.embedding.source === 'endpoint' ? 'connected' : 'disabled',
-              type: 'other',
-              model: llmConfig.embedding.model,
-            },
-            {
-              name: 'Small LLM',
-              status: llmConfig.small_model.enabled ? 'connected' : 'disabled',
-              type: 'ollama',
-              model: llmConfig.small_model.model,
-            },
-            {
-              name: 'Large LLM',
-              status: llmConfig.large_model.enabled ? 'connected' : 'disabled',
-              type: 'openai',
-              model: llmConfig.large_model.model,
-            },
-          ]}
+          services={(() => {
+            const hasEmbedding = !!(llmConfig.embedding.model && (llmConfig.embedding.source === 'endpoint' || llmConfig.embedding.source === 'huggingface'));
+            const hasFast = !!(llmConfig.small_model.enabled && llmConfig.small_model.model);
+            const hasThinking = !!(llmConfig.large_model.enabled && llmConfig.large_model.model);
+            const hasCLaRa = !!(llmConfig.clara.enabled && (llmConfig.clara.remote_url || llmConfig.clara.endpoint_id || llmConfig.clara.source === 'huggingface'));
+            const fastName = hasThinking ? 'Fast Model' : 'Single LLM';
+            type Svc = { name: string; status: 'connected' | 'disconnected' | 'disabled' | 'not-configured'; type: 'ollama' | 'clara' | 'openai' | 'other'; model?: string };
+            const items: Svc[] = [];
+            if (hasEmbedding) {
+              items.push({
+                name: 'Embedding',
+                status: llmSlotsStatus?.embedding
+                  ? (llmSlotsStatus.embedding.status === 'connected' || llmSlotsStatus.embedding.status === 'local' ? 'connected'
+                    : llmSlotsStatus.embedding.status === 'unreachable' ? 'disconnected'
+                    : llmSlotsStatus.embedding.configured ? 'disconnected' : 'not-configured')
+                  : 'connected',
+                type: 'other',
+                model: llmConfig.embedding.model,
+              });
+            }
+            if (hasFast) {
+              items.push({
+                name: fastName,
+                status: llmSlotsStatus?.small_model
+                  ? (llmSlotsStatus.small_model.status === 'connected' ? 'connected'
+                    : llmSlotsStatus.small_model.status === 'unreachable' ? 'disconnected'
+                    : llmSlotsStatus.small_model.configured ? 'disconnected' : 'not-configured')
+                  : 'connected',
+                type: 'ollama',
+                model: llmConfig.small_model.model,
+              });
+            }
+            if (hasThinking) {
+              items.push({
+                name: 'Thinking Model',
+                status: llmSlotsStatus?.large_model
+                  ? (llmSlotsStatus.large_model.status === 'connected' ? 'connected'
+                    : llmSlotsStatus.large_model.status === 'unreachable' ? 'disconnected'
+                    : llmSlotsStatus.large_model.configured ? 'disconnected' : 'not-configured')
+                  : 'connected',
+                type: 'openai',
+                model: llmConfig.large_model.model,
+              });
+            }
+            if (hasCLaRa) {
+              items.push({
+                name: 'CLaRa',
+                status: llmConfig.clara.remote_url || llmConfig.clara.endpoint_id ? 'connected' : 'not-configured',
+                type: 'clara',
+                model: 'Context Compression',
+              });
+            }
+            if (items.length === 0) {
+              items.push({ name: 'No models configured', status: 'not-configured', type: 'other' });
+            }
+            return items;
+          })()}
           bare
         />
       </div>
@@ -1416,6 +1594,41 @@ function App() {
         bare
       />
     ),
+    'trace-pipeline': (
+      <div className="h-full overflow-y-auto p-4">
+        <TracePipelineStatus
+          trace={{
+            enabled: traceStatus.enabled,
+            exists: traceStatus.exists,
+            building: traceStatus.building,
+            counts: traceStatus.counts,
+            last_build_at: null,
+          }}
+          augmentation={augmentationStatus}
+          deepAnalysis={deepAnalysisStatus}
+          smallModelConfigured={!!(llmConfig.small_model?.endpoint_id && llmConfig.small_model?.model)}
+          largeModelConfigured={!!(llmConfig.large_model?.endpoint_id && llmConfig.large_model?.model)}
+          onBuildTrace={handleBuildTrace}
+          onRunAugmentation={handleRunAugmentation}
+          onRunDeepAnalysis={handleRunDeepAnalysis}
+          augmenting={augmenting}
+          deepAnalyzing={deepAnalysisRunning}
+        />
+      </div>
+    ),
+    'deep-analysis': (
+      <div className="h-full overflow-y-auto p-4">
+        <DeepAnalysisSettings
+          schedule={deepAnalysisSchedule}
+          onScheduleChange={setDeepAnalysisSchedule}
+          largeModelConfigured={!!(llmConfig.large_model?.endpoint_id && llmConfig.large_model?.model)}
+          fastModelConfigured={!!(llmConfig.small_model?.endpoint_id && llmConfig.small_model?.model)}
+          status={deepAnalysisStatus}
+          running={deepAnalysisRunning}
+          onRunNow={handleRunDeepAnalysis}
+        />
+      </div>
+    ),
     settings: (
       <ProjectSettingsPanel
         config={projectConfig}
@@ -1439,7 +1652,8 @@ function App() {
     findActiveTask, logs, clearLogs, tasks, llmConfig,
     handleLLMConfigChange, handleAddEndpoint, handleEditEndpoint, handleDeleteEndpoint,
     handleTestEndpoint, handleFetchModels, handleTestModel, availableModels, loadingModels, testingSlot, testResults,
-    handleDetectStack,
+    handleDetectStack, augmentationStatus, deepAnalysisStatus, augmenting, deepAnalysisRunning,
+    handleRunAugmentation, handleRunDeepAnalysis, handleBuildTrace, llmSlotsStatus,
   ])
 
   // ── Dynamic panel definitions for pinned files ──────────────
@@ -1480,14 +1694,19 @@ function App() {
           testingSlot={testingSlot}
           testResults={testResults}
         />
-        <div className="h-px bg-border" />
+      </div>
+    ),
+    'deep-analysis': (
+      <div className="h-full overflow-y-auto p-4">
         <DeepAnalysisSettings
           schedule={deepAnalysisSchedule}
           onScheduleChange={setDeepAnalysisSchedule}
           largeModelConfigured={!!(llmConfig.large_model?.endpoint_id && llmConfig.large_model?.model)}
+          fastModelConfigured={!!(llmConfig.small_model?.endpoint_id && llmConfig.small_model?.model)}
           status={deepAnalysisStatus}
           running={deepAnalysisRunning}
           onRunNow={handleRunDeepAnalysis}
+          className="max-w-xl mx-auto"
         />
       </div>
     ),

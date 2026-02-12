@@ -18,3 +18,6 @@ export type { TraceExplorerProps } from './TraceExplorer';
 
 export { TraceCoveragePanel } from './TraceCoveragePanel';
 export type { TraceCoveragePanelProps } from './TraceCoveragePanel';
+
+export { TracePipelineStatus } from './TracePipelineStatus';
+export type { TracePipelineStatusProps, TraceStageInfo } from './TracePipelineStatus';

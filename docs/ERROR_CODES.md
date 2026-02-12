@@ -66,12 +66,20 @@ All API responses use a consistent envelope format:
 | `FILE_READ_FAILED` | Failed to read file from disk | Check file permissions |
 | `BUILD_FAILED` | Index build encountered an error | Check server logs for details |
 | `INTERNAL_ERROR` | Unexpected server error | Report to maintainers |
+| `IO_ERROR` | General I/O operation failed | Check disk space and permissions |
+| `INSUFFICIENT_SPACE` | Not enough disk space to perform build | Free up disk space |
+| `DOWNLOAD_FAILED` | Failed to download external resource | Check internet connection |
+| `NATIVE_DEPS_MISSING` | Required native dependencies not found | Install missing dependencies (e.g. pip install codrag[native]) |
+| `NOT_IMPLEMENTED` | Feature not yet implemented | Wait for future update |
 
 ### Project Path Errors (400)
 
 | Code | Description | Hint |
 |------|-------------|------|
 | `PROJECT_PATH_MISSING` | Project's repo_root no longer exists | Update project path or remove project |
+| `PATH_OUTSIDE_PROJECT` | Requested path is outside project root | Ensure path is relative to project root |
+| `PATH_NOT_FOUND` | Directory path does not exist | Check directory existence |
+| `CHUNK_NOT_FOUND` | Document chunk ID not found | Rebuild index if chunk should exist |
 
 ## HTTP Status Code Mapping
 

@@ -615,6 +615,11 @@ export interface GlobalConfig {
   auto_rebuild?: { enabled: boolean; debounce_ms?: number };
   llm_config?: LLMConfig;
   deep_analysis?: DeepAnalysisScheduleConfig;
+  ui_preferences?: {
+    mode?: 'light' | 'dark';
+    theme?: string;
+    bg_image?: string | null;
+  };
 }
 
 /**
@@ -648,6 +653,31 @@ export interface LicenseStatus {
     features: string[];
   };
   features: FeatureAvailability;
+}
+
+/**
+ * Per-slot LLM connectivity status from /llm/slots/status
+ */
+export interface LLMSlotStatus {
+  configured: boolean;
+  enabled?: boolean;
+  model?: string;
+  endpoint_id?: string;
+  endpoint_url?: string;
+  provider?: string;
+  source?: string;
+  status: 'not_configured' | 'endpoint_missing' | 'unreachable' | 'connected' | 'connected_no_model' | 'local';
+  model_available?: boolean;
+  error?: string;
+}
+
+/**
+ * All LLM slot statuses from /llm/slots/status
+ */
+export interface LLMSlotsStatus {
+  embedding: LLMSlotStatus;
+  small_model: LLMSlotStatus;
+  large_model: LLMSlotStatus;
 }
 
 /**

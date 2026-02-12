@@ -108,7 +108,7 @@ export function ProjectSettingsPanel({
       setDetectedPresetNames(result.detected_presets || []);
       
       // Merge recommended globs
-      let newGlobs = [...config.include_globs];
+      const newGlobs = [...config.include_globs];
       let addedCount = 0;
       for (const glob of result.recommended_globs) {
         if (!newGlobs.includes(glob)) {
@@ -144,7 +144,7 @@ export function ProjectSettingsPanel({
     const patterns = availablePresets[presetName];
     if (!patterns) return;
 
-    let newGlobs = [...config.include_globs];
+    const newGlobs = [...config.include_globs];
     let addedCount = 0;
     for (const glob of patterns) {
       if (!newGlobs.includes(glob)) {

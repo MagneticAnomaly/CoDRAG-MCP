@@ -118,8 +118,8 @@ Relevant entries in `../MASTER_TODO.md`:
 | **Neovim** | | — | stdio | Via Amp |
 
 ### CoDRAG Compatibility Checklist
-- [ ] P05-R5 Support **both** stdio AND Streamable HTTP transports (stdio done, HTTP planned)
-- [ ] P05-R6 Implement proper `Origin` validation for HTTP transport
+- [x] P05-R5 Support **both** stdio AND Streamable HTTP transports (stdio done, HTTP implemented via `/sse` + `/message`)
+- [x] P05-R6 Implement proper `Origin` validation for HTTP transport ✅ **DONE: `TrustedOriginMiddleware` in `mcp_server.py`**
 - [ ] P05-R7 Consider async **Tasks** for `codrag_build` (long-running)
 - [ ] P05-R9 Provide tool icons via `_meta.icons` field
 

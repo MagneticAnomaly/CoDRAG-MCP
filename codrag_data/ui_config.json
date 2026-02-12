@@ -167,6 +167,185 @@
       "hf_repo_id": "apple/CLaRa-7B-Instruct",
       "endpoint_id": "ep_1770657747731_8834fca43c28e",
       "remote_url": "http://localhost:8765"
-    }
+    },
+    "test_persist": true
+  },
+  "deep_analysis": {
+    "mode": "manual",
+    "threshold_percent": 20,
+    "frequency": "weekly",
+    "day_of_week": 0,
+    "hour": 2,
+    "budget_max_tokens": 50000,
+    "budget_max_minutes": 30,
+    "budget_max_items": 100,
+    "priority": "lowest_confidence"
+  },
+  "module_layout": {
+    "version": 14,
+    "panels": [
+      {
+        "id": "status",
+        "visible": true,
+        "height": 8,
+        "collapsed": false,
+        "x": 0,
+        "y": 0,
+        "w": 4
+      },
+      {
+        "id": "trace-coverage",
+        "visible": true,
+        "height": 17,
+        "collapsed": false,
+        "x": 8,
+        "y": 0,
+        "w": 4
+      },
+      {
+        "id": "usage-guide",
+        "visible": true,
+        "height": 14,
+        "collapsed": false,
+        "x": 4,
+        "y": 0,
+        "w": 4
+      },
+      {
+        "id": "roots",
+        "visible": true,
+        "height": 16,
+        "collapsed": false,
+        "x": 0,
+        "y": 8,
+        "w": 4
+      },
+      {
+        "id": "context-options",
+        "visible": true,
+        "height": 7,
+        "collapsed": false,
+        "x": 4,
+        "y": 14,
+        "w": 4
+      },
+      {
+        "id": "trace",
+        "visible": true,
+        "height": 13,
+        "collapsed": false,
+        "x": 8,
+        "y": 17,
+        "w": 4
+      },
+      {
+        "id": "results",
+        "visible": true,
+        "height": 9,
+        "collapsed": false,
+        "x": 4,
+        "y": 21,
+        "w": 4
+      },
+      {
+        "id": "search",
+        "visible": true,
+        "height": 6,
+        "collapsed": false,
+        "x": 0,
+        "y": 24,
+        "w": 4
+      },
+      {
+        "id": "context-output",
+        "visible": true,
+        "height": 10,
+        "collapsed": false,
+        "x": 4,
+        "y": 30,
+        "w": 4
+      },
+      {
+        "id": "llm-status",
+        "visible": true,
+        "height": 6,
+        "collapsed": false,
+        "x": 0,
+        "y": 30,
+        "w": 4
+      },
+      {
+        "id": "deep-analysis",
+        "visible": true,
+        "height": 23,
+        "collapsed": false,
+        "x": 8,
+        "y": 30,
+        "w": 4
+      },
+      {
+        "id": "log-console",
+        "visible": true,
+        "height": 6,
+        "collapsed": false,
+        "x": 0,
+        "y": 36,
+        "w": 4
+      },
+      {
+        "id": "trace-pipeline",
+        "visible": true,
+        "height": 5,
+        "collapsed": false,
+        "x": 0,
+        "y": 42,
+        "w": 8
+      },
+      {
+        "id": "settings",
+        "visible": true,
+        "height": 6,
+        "collapsed": true,
+        "x": 8,
+        "y": 53,
+        "w": 4
+      },
+      {
+        "id": "build",
+        "visible": false,
+        "height": 6,
+        "collapsed": false,
+        "x": 4,
+        "y": 6,
+        "w": 4
+      },
+      {
+        "id": "watch",
+        "visible": false,
+        "height": 4,
+        "collapsed": false,
+        "x": 0,
+        "y": 0,
+        "w": 4
+      },
+      {
+        "id": "file-tree",
+        "visible": false,
+        "height": 10,
+        "collapsed": false,
+        "x": 0,
+        "y": 0,
+        "w": 4
+      },
+      {
+        "id": "pinned-files",
+        "visible": false,
+        "height": 10,
+        "collapsed": false,
+        "x": 0,
+        "y": 0,
+        "w": 4
+      }
+    ]
   }
 }

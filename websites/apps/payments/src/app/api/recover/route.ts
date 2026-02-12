@@ -11,9 +11,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // TODO: Integrate with Lemon Squeezy API to find orders by email
-    // and trigger license key resend or return keys.
-    // For now, we simulate a success to unblock the UI flow.
+    // MVP: Simulate success to unblock UI flow. 
+    // Actual Lemon Squeezy integration will be added in v1.
     
     console.log(`[Mock] Recovering license for: ${email}`);
 

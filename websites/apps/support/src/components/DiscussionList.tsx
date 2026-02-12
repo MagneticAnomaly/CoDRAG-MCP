@@ -2,6 +2,7 @@
 
 import { MessageSquare, ExternalLink } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import Image from "next/image";
 import type { Discussion } from "../lib/github";
 import { Button } from "@codrag/ui";
 
@@ -59,7 +60,7 @@ export function DiscussionList({ discussions }: DiscussionListProps) {
                   <span>{formatDistanceToNow(new Date(discussion.createdAt), { addSuffix: true })}</span>
                   <span>•</span>
                   <span className="flex items-center gap-1">
-                    by <img src={discussion.author.avatarUrl} alt={discussion.author.login} className="w-4 h-4 rounded-full" /> {discussion.author.login}
+                    by <Image src={discussion.author.avatarUrl} alt={discussion.author.login} width={16} height={16} className="rounded-full" /> {discussion.author.login}
                   </span>
                 </div>
                 <h3 className="text-lg font-medium text-text group-hover:text-primary transition-colors line-clamp-1">

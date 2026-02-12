@@ -14,7 +14,7 @@ import type {
   SearchResponse,
   WatchActionResponse,
 } from './types';
-import type { LLMStatus, LicenseStatus, Project, ProjectStatus, TraceCoverage, TraceStatus, WatchStatus, GlobalConfig, ModelStatusResult, ModelReadinessStatus, AugmentationStatus, DeepAnalysisRunStatus } from '../types';
+import type { LLMStatus, LicenseStatus, Project, ProjectStatus, TraceCoverage, TraceStatus, WatchStatus, GlobalConfig, ModelStatusResult, ModelReadinessStatus, AugmentationStatus, DeepAnalysisRunStatus, LLMSlotsStatus } from '../types';
 
 export interface FileTreeNode {
   name: string;
@@ -99,6 +99,9 @@ export interface ApiClient {
   fetchLLMModels(provider: string, url: string, apiKey?: string): Promise<{ models: string[] }>;
   testLLMModel(provider: string, url: string, model: string, kind: string, apiKey?: string): Promise<{ success: boolean; message: string; model_status?: ModelReadinessStatus }>;
   getModelStatus(provider: string, url: string, model: string, ensureReady?: boolean, apiKey?: string): Promise<ModelStatusResult>;
+
+  // LLM Slot Connectivity
+  getLLMSlotsStatus(): Promise<LLMSlotsStatus>;
 
   // Augmentation & Deep Analysis
   getAugmentStatus(projectId: string): Promise<AugmentationStatus>;
@@ -384,13 +387,11 @@ export class CodragApiClient implements ApiClient {
   // ── Global Config ──────────────────────────────────────────
 
   async getGlobalConfig(): Promise<GlobalConfig> {
-    // Note: The backend endpoint is currently under /api/code-index/config
-    // We might want to move this to a more generic path later
-    return this.requestEnvelope<GlobalConfig>('/api/code-index/config');
+    return this.requestEnvelope<GlobalConfig>('/global/config');
   }
 
   async updateGlobalConfig(config: GlobalConfig): Promise<GlobalConfig> {
-    return this.requestEnvelope<GlobalConfig>('/api/code-index/config', {
+    return this.requestEnvelope<GlobalConfig>('/global/config', {
       method: 'PUT',
       body: config,
     });
@@ -485,6 +486,12 @@ export class CodragApiClient implements ApiClient {
     }
 
     return envelope.data;
+  }
+
+  // ── LLM Slot Connectivity ─────────────────────────────────
+
+  async getLLMSlotsStatus(): Promise<LLMSlotsStatus> {
+    return this.requestEnvelope<LLMSlotsStatus>('/llm/slots/status');
   }
 
   // ── Augmentation & Deep Analysis ──────────────────────────

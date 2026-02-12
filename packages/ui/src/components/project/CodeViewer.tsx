@@ -1,33 +1,29 @@
-// @ts-nocheck
 import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
-// @ts-ignore - Types are missing for some languages in @types/react-syntax-highlighter
-import { 
-  bash, 
-  c, 
-  cpp, 
-  csharp,
-  css, 
-  dart,
-  go, 
-  java, 
-  javascript, 
-  json, 
-  kotlin,
-  lua,
-  markdown, 
-  objectivec,
-  php,
-  python, 
-  r,
-  ruby,
-  rust, 
-  scala,
-  sql, 
-  swift,
-  typescript, 
-  yaml,
-  ini,
-} from 'react-syntax-highlighter/dist/esm/languages/prism';
+import bash from 'react-syntax-highlighter/dist/esm/languages/prism/bash';
+import c from 'react-syntax-highlighter/dist/esm/languages/prism/c';
+import cpp from 'react-syntax-highlighter/dist/esm/languages/prism/cpp';
+import csharp from 'react-syntax-highlighter/dist/esm/languages/prism/csharp';
+import css from 'react-syntax-highlighter/dist/esm/languages/prism/css';
+import dart from 'react-syntax-highlighter/dist/esm/languages/prism/dart';
+import go from 'react-syntax-highlighter/dist/esm/languages/prism/go';
+import java from 'react-syntax-highlighter/dist/esm/languages/prism/java';
+import javascript from 'react-syntax-highlighter/dist/esm/languages/prism/javascript';
+import json from 'react-syntax-highlighter/dist/esm/languages/prism/json';
+import kotlin from 'react-syntax-highlighter/dist/esm/languages/prism/kotlin';
+import lua from 'react-syntax-highlighter/dist/esm/languages/prism/lua';
+import markdown from 'react-syntax-highlighter/dist/esm/languages/prism/markdown';
+import objectivec from 'react-syntax-highlighter/dist/esm/languages/prism/objectivec';
+import php from 'react-syntax-highlighter/dist/esm/languages/prism/php';
+import python from 'react-syntax-highlighter/dist/esm/languages/prism/python';
+import r from 'react-syntax-highlighter/dist/esm/languages/prism/r';
+import ruby from 'react-syntax-highlighter/dist/esm/languages/prism/ruby';
+import rust from 'react-syntax-highlighter/dist/esm/languages/prism/rust';
+import scala from 'react-syntax-highlighter/dist/esm/languages/prism/scala';
+import sql from 'react-syntax-highlighter/dist/esm/languages/prism/sql';
+import swift from 'react-syntax-highlighter/dist/esm/languages/prism/swift';
+import typescript from 'react-syntax-highlighter/dist/esm/languages/prism/typescript';
+import yaml from 'react-syntax-highlighter/dist/esm/languages/prism/yaml';
+import ini from 'react-syntax-highlighter/dist/esm/languages/prism/ini';
 import markup from 'react-syntax-highlighter/dist/esm/languages/prism/markup';
 import docker from 'react-syntax-highlighter/dist/esm/languages/prism/docker';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
