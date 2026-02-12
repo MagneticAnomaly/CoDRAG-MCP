@@ -620,6 +620,7 @@ export interface GlobalConfig {
     theme?: string;
     bg_image?: string | null;
   };
+  module_layout?: import('./types/layout').DashboardLayout;
 }
 
 /**

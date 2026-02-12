@@ -1199,6 +1199,12 @@ function App() {
             if (prefs.theme) setUiTheme(prefs.theme)
             if (prefs.bg_image !== undefined) setBgImage(prefs.bg_image)
           }
+          if (globalCfg.module_layout && globalCfg.module_layout.version) {
+            // Persist to localStorage so useLayoutPersistence picks it up
+            try {
+              localStorage.setItem('codrag_dashboard_layout', JSON.stringify(globalCfg.module_layout))
+            } catch { /* storage full */ }
+          }
         } catch {
           // Global config not available — use defaults
         }
