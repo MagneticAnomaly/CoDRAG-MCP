@@ -1,7 +1,7 @@
 {
   "name": "codrag-mcp",
   "version": "0.0.0",
-  "description": "Thin MCP wrapper for CoDRAG (local-first codebase context)",
+  "description": "The Universal Context Model for AI Coding Agents (MCP Server)",
   "license": "MIT",
   "private": true,
   "bin": {
