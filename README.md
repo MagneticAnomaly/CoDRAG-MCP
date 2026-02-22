@@ -1,4 +1,7 @@
-<h1 align="center">CoDRAG</h1>
+<p align="center">
+  <img src="codrag-github-header.png" alt="CoDRAG" width="100%">
+</p>
+
 <h2 align="center"><em>The bridge between how you think about code and how AI reads it.</em></h2>
 
 <div align="center">
@@ -37,7 +40,7 @@ AI tools are evolving fast. The context they need shouldn't be locked inside one
 | **"Fragmented Context"** | Each tool (Cursor, VS Code, CLI) has its own partial index. CoDRAG is a **unified context server** for *all* your tools. |
 | **"Dumb Search"** | grep/regex misses concepts. CoDRAG uses **Trace Indexing** (Who calls this? What implements this interface?) + Semantic Search. |
 | **"Privacy Risks"** | Most tools upload code to index it. CoDRAG is **100% Local-First**. Your code never leaves your machine. |
-| **"Context Window Limits"** | Pasting huge files wastes tokens. CoDRAG uses **Context Compression** (via [CLaRa](https://github.com/apple/ml-clara)) to pack 80% more meaning into the same window. |
+| **"Context Window Limits"** | Pasting huge files wastes tokens. CoDRAG uses **Structural Compression** (LOD) to pack 3–20× more files into the same window — no GPU or sidecar needed. |
 | **"Managing separate RAG indexes for 5+ repos is tedious"** | Single daemon manages all projects. |
 | **"Each IDE tool spins up its own Ollama connection"** | Shared LLM connection pool. |
 | **"Juggling multiple ports/processes per project"** | One port (8400), project tabs in UI. |
@@ -105,10 +108,97 @@ codrag mcp-config --ide all
 # Install Ollama (if not installed)
 curl -fsSL https://ollama.com/install.sh | sh
 
-# Pull embedding model
-ollama pull nomic-embed-text
+# Pull the recommended embedding model
+ollama pull nomic-embed-text        # standard quality (~274 MB)
 
 # CoDRAG will auto-detect Ollama at localhost:11434
+# No Ollama? Run: codrag models  (downloads v1.5 ONNX backup, ~132 MB)
+```
+
+---
+
+## Multi-Project Setup
+
+CoDRAG supports multiple projects in a single daemon. When you invoke `codrag` from an AI tool like Windsurf or Cursor, the MCP server needs to know **which project** to query. There are three routing mechanisms, applied in priority order:
+
+### 1. Auto-Detect from Workspace (Default)
+
+When your IDE opens a workspace, it spawns a separate MCP process per window. CoDRAG matches the workspace root against registered project paths:
+
+```
+Windsurf Window 1: /Users/you/projects/frontend
+  → MCP auto-detects → CoDRAG project "frontend"
+
+Windsurf Window 2: /Users/you/projects/backend
+  → MCP auto-detects → CoDRAG project "backend"
+```
+
+This works automatically with:
+- **Per-workspace config** (`.windsurf/mcp.json` or `.cursor/mcp.json` in each project root)
+- **Global config** — the IDE sets the MCP subprocess CWD to the workspace root
+
+Detection sources (checked in order):
+1. **MCP initialize roots** — workspace URIs sent by the IDE during handshake
+2. **Process CWD** — the working directory of the MCP subprocess
+3. **Single-project shortcut** — if only one project exists, it's used automatically
+
+### 2. Pinned Project (CLI Flag)
+
+Pin the MCP to a specific project by ID. Useful for global configs when auto-detect isn't sufficient:
+
+```bash
+# Generate config pinned to a specific project
+codrag mcp-config --ide windsurf --project proj_abc123
+
+# Resulting config:
+# { "command": "codrag", "args": ["mcp", "--project", "proj_abc123", "--daemon", "http://127.0.0.1:8400"] }
+```
+
+### 3. Tool-Level Override (AI Self-Correction)
+
+Every CoDRAG tool accepts an optional `project_id` parameter. If auto-detect is ambiguous, the AI model receives the full project list in the error message and can retry with an explicit ID:
+
+```json
+// AI calls codrag_status, gets ambiguous error with project list
+// AI retries with explicit project_id:
+{ "name": "codrag", "arguments": { "query": "auth flow", "project_id": "proj_abc123" } }
+```
+
+The `codrag_status` tool also returns `available_projects` when multiple projects exist, so the AI can discover project IDs proactively.
+
+### Recommended Setup for Multiple Projects
+
+**Option A: Per-project config (recommended for Windsurf/Cursor)**
+
+Place a `.windsurf/mcp.json` (or `.cursor/mcp.json`) in each project root:
+
+```json
+{
+  "mcpServers": {
+    "codrag": {
+      "command": "codrag",
+      "args": ["mcp", "--daemon", "http://127.0.0.1:8400"]
+    }
+  }
+}
+```
+
+Each window gets its own MCP process with auto-detection.
+
+**Option B: Global config with auto-detect**
+
+Single config, auto-detection handles routing:
+
+```bash
+codrag mcp-config --ide windsurf --mode auto
+```
+
+**Option C: Global config with pinned project**
+
+For single-project users or dedicated tool windows:
+
+```bash
+codrag mcp-config --ide windsurf --project proj_abc123
 ```
 
 ---
@@ -179,17 +269,17 @@ CoDRAG is a **local-first, team-ready** application that provides:
 │  ├── EmbeddingIndex        Semantic vector search (per project)         │
 │  ├── TraceIndex            Symbol graph + import edges                  │
 │  ├── FileWatcher           Auto-rebuild on changes                      │
-│  └── LLMCoordinator        Ollama/CLaRa connection management           │
+│  └── LLMCoordinator        Ollama connection management                  │
 ├─────────────────────────────────────────────────────────────────────────┤
 │  CLI                                                                    │
 │  codrag serve | add | build | search | ui | mcp                         │
 └─────────────────────────────────────────────────────────────────────────┘
-            │                    │                    │
-            ▼                    ▼                    ▼
-       ┌─────────┐         ┌─────────┐           ┌─────────┐
-       │ Ollama  │         │  CLaRa  │           │ Project │
-       │ :11434  │         │  :8765  │           │  Dirs   │
-       └─────────┘         └─────────┘           └─────────┘
+            │                                        │
+            ▼                                        ▼
+       ┌─────────┐                              ┌─────────┐
+       │ Ollama  │                              │ Project │
+       │ :11434  │                              │  Dirs   │
+       └─────────┘                              └─────────┘
 ```
 
 ```mermaid
@@ -251,8 +341,8 @@ The structural graph is just the skeleton. A multi-pass enrichment pipeline laye
 Each node gets an **epistemic score** (0.0–1.0) measuring how well the graph understands it — and scores decay on change, so the graph stays current as your codebase evolves.
 
 ### LLM Integration
-- **Embeddings:** Ollama (`nomic-embed-text` recommended) or native ONNX for zero-latency semantic search
-- **Compression:** CLaRa (optional) for context window optimization
+- **Embeddings:** Ollama (`nomic-embed-text-v2-moe` recommended) or native ONNX v1.5 as a zero-dependency fallback
+- **Compression:** Built-in LOD (structural code compression, 3–20×, no model needed)
 - **Augmentation:** Mistral/Llama (optional) for code summaries
 - Reuses single Ollama connection across all indexed projects
 
@@ -347,13 +437,9 @@ codrag version                                                          # Versio
 # LLM Services
 ollama:
   url: http://localhost:11434
-  embedding_model: nomic-embed-text
+  embedding_model: nomic-embed-text-v2-moe  # recommended; fallback: nomic-embed-text-v1.5 (ONNX)
   augmentation_model: mistral  # optional
   
-clara:
-  url: http://localhost:8765
-  enabled: false  # optional compression
-
 # Index Settings
 index:
   data_dir: ~/.local/share/codrag
@@ -456,7 +542,7 @@ POST /projects/{id}/trace/neighbors  Graph expansion
 ### LLM
 
 ```
-GET  /llm/status                  Ollama/CLaRa connection status
+GET  /llm/status                  Ollama connection status
 POST /llm/test                    Test connections
 ```
 
@@ -533,8 +619,7 @@ The actual CoDRAG engine, dashboard, CLI, and all indexing logic live in the mai
 ## Related Projects
 
 - **[Ollama](https://ollama.com/)** — Local LLM serving (CoDRAG uses for embeddings)
-- **[CLaRa](https://github.com/apple/ml-clara)** — Context compression (optional integration)
-- **[CLaRa-Remembers-It-All](https://github.com/EricBintner/CLaRa-Remembers-It-All)** — For hosting CLaRa models on a network(optional integration)
+- **[Model Context Protocol](https://modelcontextprotocol.io)** — The standard CoDRAG speaks natively
 
 ---
 
